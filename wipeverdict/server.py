@@ -40,6 +40,7 @@ def _map_for_death(report: PullReport, death, index: int) -> Optional[dict]:
     if len(markers) < 3:
         return None  # not enough to be worth drawing
     return {
+        "source": "death",
         "death_index": index,
         "at": report.pull.fmt(death.t),
         "victim": death.name,
@@ -122,6 +123,7 @@ def _report_json(report: PullReport, pull_id: int = -1) -> dict:
         ],
         "avoidable": [
             {
+                "index": i,
                 "player": r.player,
                 "role": r.role,
                 "mechanic": r.mechanic,
@@ -129,7 +131,7 @@ def _report_json(report: PullReport, pull_id: int = -1) -> dict:
                 "damage": r.damage,
                 "counted_by": r.counted_by,
             }
-            for r in report.avoidable[:15]
+            for i, r in enumerate(report.avoidable[:15])
         ],
     }
 
@@ -204,6 +206,59 @@ class Monitor:
         if 0 <= pull_id < len(reports):
             return _report_json(reports[pull_id], pull_id)
         return None
+
+    def avoidable_map(self, pull_id: int, row_index: int) -> Optional[dict]:
+        """Where everyone was when this player took this mechanic.
+
+        Avoidable hits are the LEADING indicator -- they show who is about to
+        die before they do -- so being able to see the moment matters more here
+        than on the deaths table.
+        """
+        with self._lock:
+            reports = list(self.session.reports)
+        if not 0 <= pull_id < len(reports):
+            return None
+        report = reports[pull_id]
+        if not 0 <= row_index < len(report.avoidable):
+            return None
+        row = report.avoidable[row_index]
+
+        hits = [
+            d for d in report.pull.damage_taken
+            if d.dest_guid == row.guid and d.spell_id == row.spell_id
+        ]
+        if not hits:
+            return None
+        # For something counted by application, the moment that matters is when
+        # they first stepped into it. For a discrete hit, it is the worst one.
+        if row.counted_by == "applications":
+            hit, note = min(hits, key=lambda h: h.t), "first tick"
+        else:
+            hit, note = max(hits, key=lambda h: h.amount + h.absorbed), "biggest hit"
+
+        markers = position_snapshot(
+            report.pull, hit.t, report.roles, victim_guid=row.guid
+        )
+        if len(markers) < 3:
+            return None
+        return {
+            "source": "avoidable",
+            "row_index": row_index,
+            "at": report.pull.fmt(hit.t),
+            "victim": row.player,
+            "killer": row.mechanic,
+            "note": f"{note}, {hit.amount + hit.absorbed:,} damage",
+            "markers": [
+                {
+                    "name": m.name,
+                    "kind": m.kind,
+                    "x": round(m.x, 1),
+                    "y": round(m.y, 1),
+                    "stale": round(m.stale, 1),
+                }
+                for m in markers
+            ],
+        }
 
     def death_map(self, pull_id: int, death_index: int) -> Optional[dict]:
         """The position map for any death, computed on demand.
@@ -341,6 +396,13 @@ def create_app(monitor: Monitor) -> Flask:
         data = monitor.death_map(pull_id, death_index)
         if data is None:
             return jsonify({"error": "no map for that death"}), 404
+        return jsonify(data)
+
+    @app.route("/api/pull/<int:pull_id>/avoidmap/<int:row_index>")
+    def avoidable_map(pull_id: int, row_index: int):
+        data = monitor.avoidable_map(pull_id, row_index)
+        if data is None:
+            return jsonify({"error": "no map for that row"}), 404
         return jsonify(data)
 
     return app

@@ -27,7 +27,7 @@ from .analysis import (
     missed_dispels,
     missed_interrupts,
 )
-from .config import Config, load_config
+from .config import BossConfig, Config, load_config
 from .deaths import WipeVerdict, verdict
 from .findings import Finding
 from .pulls import Pull
@@ -130,6 +130,9 @@ class PullReport:
     absorbs: list[AbsorbUsage] = field(default_factory=list)
     delta: Optional[PullDelta] = None
     repeated: list[RepeatedFailure] = field(default_factory=list)
+    #: the boss's mechanic config, so findings can check what is actually
+    #: avoidable before telling somebody to stop standing in it
+    boss: Optional[BossConfig] = None
     findings: list[Finding] = field(default_factory=list)
     #: config-hygiene observations, addressed to the config owner not the raid
     notes: list[Finding] = field(default_factory=list)
@@ -198,6 +201,7 @@ class Session:
             avoidable=avoidable_table(pull, boss, roles),
             interrupts=missed_interrupts(pull, boss, cfg, roles),
             absorbs=absorb_usage(pull, cfg, roles),
+            boss=boss,
         )
         report.windows = cooldown_coverage(pull, cfg, damage_windows(pull))
 

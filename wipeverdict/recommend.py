@@ -69,6 +69,18 @@ def _root_cause(report: "PullReport") -> list[Finding]:
     cascade = report.verdict.cascade_count
     total_after = len([d for d in report.verdict.deaths if d.order > root.order])
 
+    # Whether the killing blow is something the player could have avoided is a
+    # config question, not a guess from the event type. Telling somebody to
+    # stop taking damage the config itself lists as unavoidable -- Thok's
+    # Deafening Screech hits all 25 raiders thousands of times a pull -- is
+    # advice nobody can act on, and it discredits the rest of the list.
+    boss = report.boss
+    spell_id = root.killing_blow.spell_id if root.killing_blow else -1
+    mechanic = boss.is_avoidable(spell_id) if boss else None
+    dodgeable = mechanic is not None and not mechanic.exempt(root.role)
+    known_boss = boss is not None
+    extra_evidence: list[str] = []
+
     if root.signature == SIG_TANK_MITIGATION:
         action = (
             f"Cover {root.name} on {root.killer} - the tank died to it at {at} "
@@ -79,15 +91,40 @@ def _root_cause(report: "PullReport") -> list[Finding]:
             f"Re-check the tank swap: {root.name} was killed by melee at {at} "
             f"while not tanking."
         )
-    elif root.signature == SIG_MECHANIC:
+    elif dodgeable:
         action = (
             f"Stop {root.name} taking {root.killer} - it was the first death, "
             f"at {at}."
         )
+        extra_evidence.append(
+            f"{mechanic.name} is configured as avoidable for this boss"
+        )
+    elif mechanic is not None:
+        action = (
+            f"Keep {root.name} alive through {root.killer} at {at} - their role "
+            f"is exempt from it, so this is a healing or cooldown problem."
+        )
+        extra_evidence.append(
+            f"{mechanic.name} is exempt for {root.role}s in config: they cannot "
+            f"avoid it, so it is not a positioning error"
+        )
+    elif known_boss:
+        action = (
+            f"{root.name} died to {root.killer} at {at} - it is not avoidable "
+            f"damage, so the fix is healing or a cooldown, not positioning."
+        )
+        extra_evidence.append(
+            f"{root.killer} is not in this boss's avoidable list, so nobody is "
+            f"being told to move out of it; add it to bosses.yaml if it can "
+            f"in fact be dodged"
+        )
     else:
         action = f"First death was {root.name} at {at} to {root.killer}."
+        extra_evidence.append(
+            "no mechanics configured for this boss, so avoidability is unknown"
+        )
 
-    evidence = list(root.evidence)
+    evidence = list(root.evidence) + extra_evidence
     if total_after:
         evidence.append(
             f"{cascade} of the {total_after} later deaths were cascade and are "
