@@ -203,6 +203,102 @@ def avoidable_table(
 
 
 # ---------------------------------------------------------------------------
+# Shared damage
+# ---------------------------------------------------------------------------
+
+#: Hits of the same shared mechanic within this many seconds are one instance.
+SHARED_WINDOW_S = 1.5
+
+
+@dataclass(slots=True)
+class SharedBurst:
+    t: float
+    spell_id: int
+    name: str
+    participants: int
+    per_player: int
+    total: int
+    #: how many players were alive at the time -- the control, see below
+    alive: int = 0
+
+    @property
+    def share(self) -> float:
+        """Soakers as a fraction of the raid that could have soaked.
+
+        Measured against the LIVING raid, not the roster. Late in a wipe most
+        of the raid is dead, so soaker counts collapse for reasons that have
+        nothing to do with anybody's positioning -- and per-player damage rises
+        at the same time because the fight has ramped. Two numbers moving
+        together is not one causing the other.
+        """
+        return self.participants / self.alive if self.alive else 0.0
+
+
+def shared_bursts(
+    pull: "Pull", boss: Optional[BossConfig], window: float = SHARED_WINDOW_S
+) -> list[SharedBurst]:
+    """Group each shared mechanic into instances and count who soaked it.
+
+    Unavoidable damage that is SPLIT is not a positioning failure, so it has no
+    place in the avoidable table -- but it is not nothing either. The fewer
+    players share it, the harder each one is hit, and that is measurable.
+    """
+    if boss is None or not boss.shared:
+        return []
+
+    by_spell: dict[int, list] = defaultdict(list)
+    for d in pull.damage_taken:
+        if d.spell_id in boss.shared:
+            by_spell[d.spell_id].append(d)
+
+    out: list[SharedBurst] = []
+    for spell_id, hits in by_spell.items():
+        hits.sort(key=lambda h: h.t)
+        cluster: list = [hits[0]]
+        for h in hits[1:]:
+            if h.t - cluster[-1].t <= window:
+                cluster.append(h)
+            else:
+                out.append(_burst(pull, boss, spell_id, cluster))
+                cluster = [h]
+        out.append(_burst(pull, boss, spell_id, cluster))
+    out.sort(key=lambda b: b.t)
+    return out
+
+
+def alive_at(pull: "Pull", t: float) -> int:
+    """How many players were alive at time `t`."""
+    dead = 0
+    for d in pull.deaths:
+        if d.t > t:
+            continue
+        back = next(
+            (r.t for r in pull.resurrects if r.guid == d.guid and d.t < r.t <= t),
+            None,
+        )
+        if back is None:
+            dead += 1
+    return max(0, len(pull.players) - dead)
+
+
+def _burst(
+    pull: "Pull", boss: BossConfig, spell_id: int, cluster: list
+) -> SharedBurst:
+    people = {h.dest_guid for h in cluster}
+    total = sum(h.amount + h.absorbed for h in cluster)
+    t = cluster[0].t
+    return SharedBurst(
+        t=t,
+        spell_id=spell_id,
+        name=boss.shared[spell_id].name,
+        participants=len(people),
+        per_player=int(total / max(1, len(people))),
+        total=total,
+        alive=alive_at(pull, t),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Interrupts
 # ---------------------------------------------------------------------------
 

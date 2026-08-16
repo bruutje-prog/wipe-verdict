@@ -50,6 +50,7 @@ def build_findings(
     out.extend(_repeated(report))
     out.extend(_early_deaths(report, session))
     out.extend(_cooldowns(report, session))
+    out.extend(_shared(report))
     out.extend(_interrupts_and_dispels(report))
     out.extend(_throughput(report))
 
@@ -348,6 +349,70 @@ def _cooldowns(report: "PullReport", session: "Session") -> list[Finding]:
             )
         )
         break
+    return out
+
+
+#: Below this many players alive, a soaker count says more about how many
+#: people are dead than about how the mechanic was handled.
+SOAK_MIN_ALIVE = 15
+
+
+def _shared(report: "PullReport") -> list[Finding]:
+    """Shared damage that too few people soaked."""
+    boss = report.boss
+    if boss is None or not report.shared:
+        return []
+
+    healthy = [b for b in report.shared if b.alive >= SOAK_MIN_ALIVE]
+    if len(healthy) < 3:
+        return []
+
+    out: list[Finding] = []
+    for spell_id, spec in boss.shared.items():
+        mine = [b for b in healthy if b.spell_id == spell_id]
+        if len(mine) < 3:
+            continue
+        short = [b for b in mine if b.share < spec.expect_share]
+        if not short:
+            continue
+        worst = min(short, key=lambda b: b.share)
+        good = [b for b in mine if b.share >= spec.expect_share]
+        if not good:
+            continue
+        typical = sorted(b.per_player for b in good)[len(good) // 2]
+        if worst.per_player <= typical:
+            continue  # fewer soakers did not actually cost anything
+
+        out.append(
+            Finding(
+                rank_class=RANK_COOLDOWN,
+                score=float(worst.per_player - typical) / 100_000.0,
+                action=(
+                    f"Get everyone into {spec.name} at "
+                    f"{report.pull.fmt(worst.t)} - only {worst.participants} of "
+                    f"{worst.alive} living players shared it."
+                ),
+                evidence=[
+                    f"each soaker took {worst.per_player:,} there, against "
+                    f"{typical:,} when at least "
+                    f"{spec.expect_share:.0%} of the raid shared it",
+                    f"{len(short)} of {len(mine)} casts were under-soaked",
+                    "unavoidable damage, so this is not a positioning error - "
+                    "it is about how many bodies are in it",
+                ],
+                method="soakers measured against the LIVING raid, and only for "
+                       "casts with at least "
+                       f"{SOAK_MIN_ALIVE} players still up",
+                rejected=(
+                    "raw soaker count, which collapses late in a wipe because "
+                    "most of the raid is dead - and per-player damage rises at "
+                    "the same time for unrelated reasons, so the two correlate "
+                    "without one causing the other"
+                ),
+                scope="raid-wide",
+                config_ref=f"bosses.yaml -> shared_damage -> {spec.name}",
+            )
+        )
     return out
 
 

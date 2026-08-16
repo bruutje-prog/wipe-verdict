@@ -18,7 +18,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from wipeverdict.analysis import alive_time, avoidable_table, damage_windows
+from wipeverdict.analysis import (
+    alive_at,
+    alive_time,
+    avoidable_table,
+    damage_windows,
+    shared_bursts,
+)
+from wipeverdict.session import Session
 from wipeverdict.config import load_config
 from wipeverdict.deaths import (
     SIG_LOOSE_BOSS,
@@ -462,6 +469,110 @@ class TestAvoidableCounting(unittest.TestCase):
         hit = {r.player for r in rows if r.spell_id == 143773}
         self.assertIn("Mage", hit)
         self.assertNotIn("Tank", hit, "the tank cannot avoid a frontal breath")
+
+
+class TestSharedDamage(unittest.TestCase):
+    """Unavoidable damage that is split between everyone it hits."""
+
+    def _pull_with_bursts(self, plan):
+        """plan: list of (t, n_soakers, damage_each)."""
+        p = _pull(300.0)
+        # Blood Rage belongs to Malkorok; the default fixture is Dark Shaman,
+        # and the session resolves the boss config by encounter id.
+        p.encounter_id = 1595
+        p.boss = "Malkorok"
+        p.players = {f"P{i}": f"P{i}" for i in range(25)}
+        for t, n, each in plan:
+            for i in range(n):
+                p.damage_taken.append(
+                    DamageRecord(
+                        t=t, dest_guid=f"P{i}", dest_name=f"P{i}",
+                        src_guid="Creature-1", src_name="Malkorok",
+                        spell_id=142890, spell_name="Blood Rage", amount=each,
+                        absorbed=0, overkill=-1, periodic=False, hp_after=0.8,
+                    )
+                )
+        return p
+
+    def test_alive_at_discounts_the_dead(self):
+        p = _pull(300.0)
+        p.players = {f"P{i}": f"P{i}" for i in range(25)}
+        p.deaths.append(DeathRecord(t=100.0, guid="P1", name="P1"))
+        p.deaths.append(DeathRecord(t=110.0, guid="P2", name="P2"))
+        self.assertEqual(alive_at(p, 50.0), 25)
+        self.assertEqual(alive_at(p, 105.0), 24)
+        self.assertEqual(alive_at(p, 120.0), 23)
+
+    def test_under_soaked_cast_is_reported(self):
+        cfg = load_config()
+        boss = cfg.boss(1595)
+        self.assertIsNotNone(boss, "Malkorok must be configured")
+        self.assertIn(142890, boss.shared, "Blood Rage must be shared damage")
+
+        # Three well-shared casts and one soaked by a handful, which hurts more.
+        p = self._pull_with_bursts([
+            (30.0, 24, 200_000),
+            (60.0, 23, 205_000),
+            (90.0, 24, 198_000),
+            (120.0, 8, 620_000),
+        ])
+        bursts = shared_bursts(p, boss)
+        self.assertEqual(len(bursts), 4)
+        worst = min(bursts, key=lambda b: b.share)
+        self.assertEqual(worst.participants, 8)
+        self.assertAlmostEqual(worst.share, 8 / 25)
+
+        session = Session(cfg)
+        report = session.add(p)
+        blood = [f for f in report.findings if "Blood Rage" in f.action]
+        self.assertTrue(blood, "an under-soaked cast must produce a finding")
+        self.assertIn("8 of 25", blood[0].action)
+        self.assertTrue(
+            any("correlate" in (blood[0].rejected or "") for _ in [0]),
+            "the confound must be stated",
+        )
+
+    def test_well_shared_casts_produce_no_finding(self):
+        cfg = load_config()
+        p = self._pull_with_bursts([
+            (30.0, 24, 200_000), (60.0, 23, 205_000), (90.0, 24, 198_000),
+        ])
+        report = Session(cfg).add(p)
+        self.assertFalse(
+            [f for f in report.findings if "Blood Rage" in f.action],
+            "a raid that soaks properly must not be told to soak",
+        )
+
+    def test_fewer_soakers_that_cost_nothing_are_not_reported(self):
+        """A stray fragment with few soakers and LOW damage each is not an
+        under-soak: nothing was made worse, so there is nothing to fix."""
+        cfg = load_config()
+        p = self._pull_with_bursts([
+            (30.0, 24, 200_000), (60.0, 23, 205_000), (90.0, 24, 198_000),
+            (120.0, 2, 40_000),
+        ])
+        report = Session(cfg).add(p)
+        self.assertFalse(
+            [f for f in report.findings if "Blood Rage" in f.action]
+        )
+
+    def test_soaker_counts_late_in_a_wipe_are_ignored(self):
+        """With most of the raid dead the count says nothing about play."""
+        cfg = load_config()
+        boss = cfg.boss(1595)
+        p = self._pull_with_bursts([
+            (30.0, 24, 200_000), (60.0, 23, 205_000), (90.0, 24, 198_000),
+            (200.0, 4, 900_000),
+        ])
+        for i in range(3, 22):        # 19 dead before the last cast
+            p.deaths.append(DeathRecord(t=150.0, guid=f"P{i}", name=f"P{i}"))
+        late = [b for b in shared_bursts(p, boss) if b.t == 200.0][0]
+        self.assertLess(late.alive, 15)
+        report = Session(cfg).add(p)
+        self.assertFalse(
+            [f for f in report.findings if "Blood Rage" in f.action],
+            "must not blame the survivors of a wipe for not soaking",
+        )
 
 
 class TestConfig(unittest.TestCase):

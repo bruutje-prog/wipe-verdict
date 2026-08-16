@@ -154,9 +154,16 @@ bosses:
       # Dispelled 5 times in the sample, so the missed-dispel check picks this
       # up by itself -- the dispellable set is derived from behaviour, not listed.
       - {spell_id: 142913, name: "Displaced Energy",   count: hits}
-    # OMITTED as unavoidable: Blood Rage (142890 - 1438 hits on all 26 raiders,
-    # and the fight's defining mechanic rather than anybody's mistake), Essence
-    # of Y'Shaarj (143857) and Ancient Miasma (142906).
+    # OMITTED as unavoidable: Essence of Y'Shaarj (143857) and Ancient Miasma
+    # (142906).
+
+    # Unavoidable, but SPLIT between everyone it hits, so it is not nothing:
+    # the fewer players soak it, the harder each one is hit. Not a positioning
+    # failure, so it stays out of the avoidable table -- the tool reports how
+    # many shared each cast instead.
+    shared_damage:
+      - {spell_id: 142890, name: "Blood Rage", expect_share: 0.7,
+         note: "damage divided between everyone hit; missing soakers hurt the rest"}
 
     tank_busters: []
     interruptible: []
@@ -237,8 +244,22 @@ bosses:
       - {spell_id: 144798, name: "Exploding Iron Star", count: hits}
       - {spell_id: 145199, name: "Explosive Despair",   count: hits}
       - {spell_id: 145033, name: "Empowered Whirling Corruption", count: hits}
-    # OMITTED as unavoidable: Annihilate (144969) and Whirling Corruption
-    # (144989 - 1112 hits on all 28 raiders).
+    # OMITTED as unavoidable: Whirling Corruption (144989 - 1112 hits on all
+    # 28 raiders).
+    #
+    # ANNIHILATE (144969) - UNRESOLVED, pending a call from the raid leader.
+    # Two things the logs do say, from the 09/08 and 30/06 pulls:
+    #   * It is NOT shared damage. Per-player damage stays flat at ~280k (25N)
+    #     and ~200-230k (10N) whether 25, 20, 16, 8 or 2 players are hit. If it
+    #     were split, two players would each take roughly twelve times what
+    #     twenty-five do. So it does not belong in shared_damage.
+    #   * It probably CAN be escaped. It repeats in bursts about 3s apart, and
+    #     within one sequence the number hit fell 25 -> 25 -> 20 -> 20 -> 16
+    #     during a pull that had only ONE death in total, so the decline is
+    #     people moving out of it rather than people dying.
+    # If it is escapable it belongs in avoidable, but it opens by hitting
+    # almost everyone, so expect the config-check note to flag it. Left out
+    # until confirmed rather than guessed at.
 
     tank_busters:
       # 100% of hits land on tanks: this is the tank debuff, not a positioning

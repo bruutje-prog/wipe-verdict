@@ -40,6 +40,22 @@ class Mechanic:
 
 
 @dataclass(slots=True)
+class SharedMechanic:
+    """Damage split between everyone it hits.
+
+    Unavoidable, so it does not belong in the avoidable table -- but not
+    nothing either: the fewer players share it, the harder each one is hit.
+    The actionable number is how many soaked it, not whether anyone was hit.
+    """
+
+    spell_id: int
+    name: str
+    #: soakers below this share of the raid is worth reporting
+    expect_share: float = 0.7
+    note: str = ""
+
+
+@dataclass(slots=True)
 class TankBuster:
     spell_id: int
     name: str
@@ -60,6 +76,7 @@ class BossConfig:
     display_name: str
     boss_units: list[str] = field(default_factory=list)
     avoidable: dict[int, Mechanic] = field(default_factory=dict)
+    shared: dict[int, SharedMechanic] = field(default_factory=dict)
     tank_busters: dict[int, TankBuster] = field(default_factory=dict)
     interruptible: dict[int, Interruptible] = field(default_factory=dict)
     seeded_from: str = ""
@@ -153,6 +170,14 @@ def load_config(config_dir: Optional[Path | str] = None) -> Config:
                         f"{COUNT_HITS!r} or {COUNT_APPLICATIONS!r}, got {m.count!r}"
                     )
                 boss.avoidable[m.spell_id] = m
+            for row in body.get("shared_damage") or []:
+                sm = SharedMechanic(
+                    spell_id=_as_int(row.get("spell_id")),
+                    name=row.get("name", "?"),
+                    expect_share=float(row.get("expect_share", 0.7)),
+                    note=row.get("note", ""),
+                )
+                boss.shared[sm.spell_id] = sm
             for row in body.get("tank_busters") or []:
                 tb = TankBuster(
                     spell_id=_as_int(row.get("spell_id")),
