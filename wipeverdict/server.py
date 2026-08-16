@@ -23,6 +23,9 @@ from .tail import LogTailer, find_log, read_existing
 
 POLL_SECONDS = 1.0
 
+#: How often to look for a newer session log appearing beside the current one.
+LOG_RECHECK_SECONDS = 20.0
+
 
 def _report_json(report: PullReport) -> dict:
     p = report.pull
@@ -197,6 +200,8 @@ class Monitor:
         tailer.poll()  # position at end
         with self._lock:
             self._status = "watching"
+
+        since_check = 0.0
         while True:
             lines = tailer.poll()
             if lines:
@@ -204,6 +209,20 @@ class Monitor:
                     self._consume(line)
                 with self._lock:
                     self._lines_seen += len(lines)
+
+            # This client names each session's log after its start time, so a
+            # client restart mid-raid produces a NEW file and leaves the old one
+            # frozen. Without this the dashboard would sit on a dead file for
+            # the rest of the night looking perfectly healthy.
+            since_check += POLL_SECONDS
+            if not self._explicit and since_check >= LOG_RECHECK_SECONDS:
+                since_check = 0.0
+                newest = find_log()
+                if newest is not None and newest != self.log_path:
+                    with self._lock:
+                        self._status = f"switched to a newer log: {newest.name}"
+                    self.log_path = newest
+                    tailer = LogTailer(newest, from_start=True)
             time.sleep(POLL_SECONDS)
 
     def start(self) -> None:

@@ -18,21 +18,34 @@ import os
 from pathlib import Path
 from typing import Iterator, Optional
 
-#: Where a Windows install usually keeps the log, most likely flavour first.
-DEFAULT_LOG_LOCATIONS = [
-    r"C:\Program Files (x86)\World of Warcraft\_classic_\Logs\WoWCombatLog.txt",
-    r"C:\Program Files (x86)\World of Warcraft\_retail_\Logs\WoWCombatLog.txt",
-    r"C:\Program Files (x86)\World of Warcraft\_anniversary_\Logs\WoWCombatLog.txt",
-    r"D:\World of Warcraft\_classic_\Logs\WoWCombatLog.txt",
+#: Log DIRECTORIES, most likely flavour first.
+DEFAULT_LOG_DIRS = [
+    r"C:\Program Files (x86)\World of Warcraft\_classic_\Logs",
+    r"C:\Program Files (x86)\World of Warcraft\_retail_\Logs",
+    r"C:\Program Files (x86)\World of Warcraft\_anniversary_\Logs",
+    r"D:\World of Warcraft\_classic_\Logs",
 ]
 
+#: The log is NOT always called WoWCombatLog.txt. This client writes a
+#: timestamped name per session -- WoWCombatLog-081626_195253.txt -- so looking
+#: for the bare filename finds nothing on a night that is actively logging.
+#: `Archive-*` files live in a subdirectory and are excluded by not recursing.
+LOG_GLOB = "WoWCombatLog*.txt"
 
-def find_log() -> Optional[Path]:
-    """Locate WoWCombatLog.txt, preferring the most recently written one."""
-    found = [Path(p) for p in DEFAULT_LOG_LOCATIONS if Path(p).exists()]
-    if not found:
+
+def find_log(dirs: Optional[list[str]] = None) -> Optional[Path]:
+    """Locate the live combat log: newest matching file across known dirs."""
+    candidates: list[Path] = []
+    for d in dirs or DEFAULT_LOG_DIRS:
+        directory = Path(d)
+        if not directory.is_dir():
+            continue
+        candidates.extend(
+            p for p in directory.glob(LOG_GLOB) if p.is_file()
+        )
+    if not candidates:
         return None
-    return max(found, key=lambda p: p.stat().st_mtime)
+    return max(candidates, key=lambda p: p.stat().st_mtime)
 
 
 def _signature(path: Path) -> Optional[tuple]:

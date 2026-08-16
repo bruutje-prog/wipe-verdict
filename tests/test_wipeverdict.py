@@ -548,6 +548,42 @@ class TestTailer(unittest.TestCase):
             path.write_text("new session\n", encoding="utf-8")
             self.assertEqual(tailer.poll(), ["new session"])
 
+    def test_finds_a_timestamped_log(self):
+        """The live log is NOT called WoWCombatLog.txt.
+
+        This client writes one file per session named after its start time --
+        WoWCombatLog-081626_195253.txt. Looking for the bare filename found
+        nothing on a night that was actively logging.
+        """
+        from wipeverdict.tail import find_log
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "WoWCombatLog-081326_205908.txt").write_text("old\n", encoding="utf-8")
+            newer = d / "WoWCombatLog-081626_195253.txt"
+            newer.write_text("new\n", encoding="utf-8")
+            import os
+            import time as _t
+
+            now = _t.time()
+            os.utime(d / "WoWCombatLog-081326_205908.txt", (now - 500, now - 500))
+            os.utime(newer, (now, now))
+
+            found = find_log([str(d)])
+            self.assertEqual(found, newer, "must pick the newest session log")
+
+    def test_archive_subdirectory_is_not_picked_up(self):
+        """Uploaded logs are moved into warcraftlogsarchive/ and are dead."""
+        from wipeverdict.tail import find_log
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            (d / "warcraftlogsarchive").mkdir()
+            (d / "warcraftlogsarchive" / "WoWCombatLog-010126_000000.txt").write_text(
+                "archived\n", encoding="utf-8"
+            )
+            self.assertIsNone(find_log([str(d)]))
+
     def test_no_output_when_nothing_appended(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "WoWCombatLog.txt"
