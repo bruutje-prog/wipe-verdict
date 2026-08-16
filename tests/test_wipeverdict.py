@@ -1,4 +1,4 @@
-"""Tests for Wipe Verdict.
+"""Tests for the Snakes of Honour wipe analyser.
 
 Weighted towards the conclusions that would be embarrassing to get wrong in
 front of a raid: cascade attribution, the absorb-uptime rule, and the parser's

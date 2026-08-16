@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Wipe Verdict</title>
+<title>Snakes of Honour — Wipe analyser</title>
 <style>
   :root {
     --bg: #12141a;
@@ -26,6 +26,7 @@
     padding: 14px 22px; border-bottom: 1px solid var(--line); background: var(--panel);
   }
   header h1 { font-size: 17px; margin: 0; letter-spacing: .5px; }
+  header h1 .sub { color: var(--dim); font-weight: 400; letter-spacing: .3px; }
   header .status { color: var(--dim); font-size: 13px; margin-left: auto; }
   .live-dot {
     display: inline-block; width: 8px; height: 8px; border-radius: 50%;
@@ -136,7 +137,7 @@
 </head>
 <body>
 <header>
-  <h1>WIPE VERDICT</h1>
+  <h1>SNAKES OF HONOUR <span class="sub">— Wipe analyser</span></h1>
   <span class="muted" id="boss-now"></span>
   <span class="status"><span class="live-dot" id="dot"></span><span id="status">connecting…</span></span>
 </header>

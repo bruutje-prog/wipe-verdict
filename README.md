@@ -1,4 +1,4 @@
-# Wipe Verdict
+# Snakes of Honour — Wipe analyser
 
 Progression-night feedback for a 25-player Mists of Pandaria Classic raid.
 
@@ -128,7 +128,22 @@ Celestial Alignment and Incarnation must be sequenced, and that is recorded in
 `config/mechanics.yaml` rather than assumed.
 
 **Comparisons never blend difficulties or raid sizes.** A 10-player night is
-not evidence about a 25-player one.
+not evidence about a 25-player one. Nor do they blend mechanics: Thok's breath
+depends on which captive he drinks, so the pull-over-pull delta counts only
+mechanics that occurred in *both* pulls and names the ones that did not.
+
+**Nobody is told to avoid the unavoidable.** The root cause checks the mechanic
+config before phrasing its advice, so a death to raid-wide damage reads as a
+healing or cooldown problem rather than "stop standing in it".
+
+**Soaking is the job, not a mistake.** A mechanic someone must stand in is
+never counted against them; the failure spell — the one that punishes the whole
+raid when a soak is missed — is what gets reported.
+
+**Soak and share counts are measured against the LIVING raid.** Late in a wipe
+those counts collapse because most of the raid is dead, while per-player damage
+rises for unrelated reasons. Two numbers moving together is not one causing the
+other, so casts with fewer than 15 players up are ignored.
 
 ---
 
@@ -137,9 +152,18 @@ not evidence about a 25-player one.
 Mechanics live in YAML so a raider who knows the fight can correct the tool
 without touching code:
 
-- `config/bosses.yaml` — per boss: avoidable mechanics, tank busters,
-  interruptible casts. Seeded with **Kor'kron Dark Shaman** and **Siegecrafter
-  Blackfuse**.
+- `config/bosses.yaml` — per boss. Seeded for all eight bosses from **Kor'kron
+  Dark Shaman to Garrosh Hellscream**:
+  - `avoidable` — damage nobody should be taking. `count: applications` for
+    anything that ticks; `exempt_roles: [tank]` when the role holding the boss
+    cannot avoid it; `amount_at_least` when one spell id carries both an
+    avoidable and an unavoidable component.
+  - `soaks` — something a player must deliberately stand in. Soaking is
+    credited, never blamed; `fail_spell_id` is the raid-wide punishment when a
+    soak is missed, and that is what gets counted.
+  - `shared_damage` — unavoidable but split between everyone hit, so the
+    actionable number is how many soaked it.
+  - `tank_busters`, `interruptible`.
 - `config/mechanics.yaml` — raid cooldowns, consumed absorbs, interrupt
   abilities, non-stacking pairs, reprieve talents.
 
@@ -167,8 +191,8 @@ That usually means the mechanic is unavoidable and the config is wrong.
 Verified against this guild's own logs:
 
 - **Kor'kron Dark Shaman, 25 Heroic, 30/07** — 3 pulls (one 1-second reset, one
-  wipe at 6.8%, one kill), two tanks and five healers identified correctly,
-  both bosses distinguished from their wolves.
+  wipe at 23.2%, one kill), tanks and healers identified correctly, both bosses
+  distinguished from their wolves.
 - **Full raid night, 09/08** — 33 encounter boundaries across six bosses,
   including a 10-pull Spoils of Pandaria progression block.
 - **Live path** — 204,228 lines replayed into a file in bursts with deliberate

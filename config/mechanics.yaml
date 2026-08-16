@@ -1,4 +1,5 @@
-# Wipe Verdict -- class and raid mechanics that are not boss-specific.
+# Snakes of Honour, Wipe analyser -- class and raid mechanics
+# that are not boss-specific.
 #
 # These encode judgements that were wrong at least once in manual review. Each
 # carries the reason, because the reason is what stops it being "corrected"

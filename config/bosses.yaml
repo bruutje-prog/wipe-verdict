@@ -1,4 +1,4 @@
-# Wipe Verdict -- per-boss mechanics.
+# Snakes of Honour, Wipe analyser -- per-boss mechanics.
 #
 # EVERY spell id here was read out of this guild's own combat logs (see
 # tools/mine_spells.py), never from a spell database, so they are guaranteed to
@@ -258,32 +258,35 @@ bosses:
       - {spell_id: 144798, name: "Exploding Iron Star", count: hits}
       - {spell_id: 145199, name: "Explosive Despair",   count: hits}
       - {spell_id: 145033, name: "Empowered Whirling Corruption", count: hits}
+      # Annihilate is TWO mechanics under one spell id (tooltip): 3.5m to
+      # anyone in a 50-yard cone in front of Garrosh, and 700k to everyone in
+      # the Realm of Y'Shaarj. Only the cone is a mistake.
+      #
+      # The threshold separates them, and the logs say it is safe: across 523
+      # Annihilate hits in five pulls the maximum was 367,836, and NOT ONE
+      # exceeded 500k. That whole distribution is the 700k realm pulse after
+      # mitigation (~292k at 25, ~180k at 10). A 3.5m cone cannot mitigate down
+      # anywhere near 800k, so this counts cone hits only and stays silent
+      # while the raid keeps dodging it -- which, on this evidence, it always
+      # has.
+      - {spell_id: 144969, name: "Annihilate (cone)", count: hits,
+         amount_at_least: 800000}
     # OMITTED as unavoidable: Whirling Corruption (144989 - 1112 hits on all
     # 28 raiders).
     #
-    # ANNIHILATE (144969) is TWO mechanics under one spell id: an avoidable
-    # frontal cone and an unavoidable raid-wide pulse (raid leader, 16/08).
-    # Only the cone is anybody's mistake, and the log offers no clean way to
-    # tell the two apart:
-    #   * one spell id covers both - there is no second id to key on
-    #   * it is not shared damage: per-player damage is flat whether 25 or 2
-    #     players are hit, where a split would be about twelve times
-    #   * position does not separate them either. Hits inside a 120-degree
-    #     frontal arc measured LOWER median damage (180k) than hits outside it
-    #     (259k), and big and small hits sat at near-identical median angles
-    #     (113 vs 106 degrees). Garrosh turns constantly, so his sampled facing
-    #     cannot reconstruct where the cone pointed when it fired.
-    #
-    # What the log does show is a bimodal damage split: a cluster around
-    # 150-200k and another around 300-380k. If the cone is the harder hit, add
-    # the entry below with a threshold between the two clusters, which counts
-    # only the cone and ignores the pulse:
-    #
-    #   - {spell_id: 144969, name: "Annihilate (cone)", count: hits,
-    #      amount_at_least: 280000}
-    #
-    # Left commented out because which cluster is the cone is a call about the
-    # fight, not something these numbers decide.
+    # Annihilate is handled in the avoidable list above, by damage threshold.
+    # Two dead ends recorded so they are not re-attempted:
+    #   * It is NOT shared damage -- per-player damage is flat whether 25 or 2
+    #     players are hit, where a split would be about twelve times.
+    #   * Position does NOT separate the cone from the pulse. Hits inside a
+    #     120-degree frontal arc measured LOWER median damage (180k) than hits
+    #     outside it (259k), and big and small hits sat at near-identical
+    #     median angles (113 vs 106 degrees). Garrosh turns constantly, so his
+    #     sampled facing cannot reconstruct where the cone pointed when it
+    #     fired. The threshold works and this does not.
+    # Also: the number of players hit per burst falls during a sequence
+    # (25 -> 20 -> 16). That is people entering and leaving the Realm of
+    # Y'Shaarj, which is who the 700k pulse hits -- NOT people dodging.
 
     tank_busters:
       # 100% of hits land on tanks: this is the tank debuff, not a positioning
