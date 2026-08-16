@@ -28,24 +28,23 @@ POLL_SECONDS = 1.0
 LOG_RECHECK_SECONDS = 20.0
 
 
-def _position_map(report: PullReport) -> Optional[dict]:
-    """Where everyone stood when the pull's root-cause death happened.
+def _map_for_death(report: PullReport, death, index: int) -> Optional[dict]:
+    """Where everyone stood when one particular death happened.
 
     A death is far easier to argue about with a picture: standing in the wrong
     place is visible, and so is standing in the right one.
     """
-    root = report.verdict.root
-    if root is None:
-        return None
     markers = position_snapshot(
-        report.pull, root.t, report.roles, victim_guid=root.guid
+        report.pull, death.t, report.roles, victim_guid=death.guid
     )
     if len(markers) < 3:
         return None  # not enough to be worth drawing
     return {
-        "at": report.pull.fmt(root.t),
-        "victim": root.name,
-        "killer": root.killer,
+        "death_index": index,
+        "at": report.pull.fmt(death.t),
+        "victim": death.name,
+        "killer": death.killer,
+        "cascade": death.is_cascade,
         "markers": [
             {
                 "name": m.name,
@@ -57,6 +56,24 @@ def _position_map(report: PullReport) -> Optional[dict]:
             for m in markers
         ],
     }
+
+
+def _root_index(report: PullReport) -> int:
+    root = report.verdict.root
+    if root is None:
+        return -1
+    for i, d in enumerate(report.verdict.deaths):
+        if d is root:
+            return i
+    return -1
+
+
+def _position_map(report: PullReport) -> Optional[dict]:
+    """The default map: the root-cause death."""
+    idx = _root_index(report)
+    if idx < 0:
+        return None
+    return _map_for_death(report, report.verdict.deaths[idx], idx)
 
 
 def _report_json(report: PullReport, pull_id: int = -1) -> dict:
@@ -86,8 +103,13 @@ def _report_json(report: PullReport, pull_id: int = -1) -> dict:
             if report.delta
             else None
         ),
+        "root_index": _root_index(report),
         "deaths": [
             {
+                # The index into the pull's death list, so the dashboard can
+                # ask for this death's position map by identity rather than by
+                # its place in a truncated table.
+                "index": i,
                 "at": p.fmt(d.t),
                 "name": d.name,
                 "role": d.role,
@@ -96,7 +118,7 @@ def _report_json(report: PullReport, pull_id: int = -1) -> dict:
                 "source": d.killer_source,
                 "cascade": d.is_cascade,
             }
-            for d in v.deaths[:20]
+            for i, d in enumerate(v.deaths[:20])
         ],
         "avoidable": [
             {
@@ -182,6 +204,22 @@ class Monitor:
         if 0 <= pull_id < len(reports):
             return _report_json(reports[pull_id], pull_id)
         return None
+
+    def death_map(self, pull_id: int, death_index: int) -> Optional[dict]:
+        """The position map for any death, computed on demand.
+
+        Not bundled into the state payload: a 30-death pull would rebuild
+        thirty snapshots every two-second poll to draw one of them.
+        """
+        with self._lock:
+            reports = list(self.session.reports)
+        if not 0 <= pull_id < len(reports):
+            return None
+        report = reports[pull_id]
+        deaths = report.verdict.deaths
+        if not 0 <= death_index < len(deaths):
+            return None
+        return _map_for_death(report, deaths[death_index], death_index)
 
     # -- ingestion ------------------------------------------------------
     def _consume(self, line: str) -> None:
@@ -296,6 +334,13 @@ def create_app(monitor: Monitor) -> Flask:
         data = monitor.report_json(pull_id)
         if data is None:
             return jsonify({"error": "no such pull"}), 404
+        return jsonify(data)
+
+    @app.route("/api/pull/<int:pull_id>/map/<int:death_index>")
+    def death_map(pull_id: int, death_index: int):
+        data = monitor.death_map(pull_id, death_index)
+        if data is None:
+            return jsonify({"error": "no map for that death"}), 404
         return jsonify(data)
 
     return app

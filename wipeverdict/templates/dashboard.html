@@ -77,6 +77,10 @@
   td { padding: 5px 8px 5px 0; border-bottom: 1px solid #23262f; }
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
   tr.cascade td { color: var(--cascade); }
+  tbody tr[data-death] { cursor: pointer; }
+  tbody tr[data-death]:hover td { background: var(--panel-2); }
+  tbody tr.selrow td { background: #2b3446; }
+  tbody tr.selrow td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
   .pill {
     font-size: 11px; border-radius: 4px; padding: 1px 6px;
     background: var(--panel-2); color: var(--dim);
@@ -245,10 +249,42 @@ const MAP_COLOURS = {
   tank: "#6ea8ff", healer: "var(--good)", dps: "#9aa3b5",
 };
 
+// Which pull is on screen, so a death map can be asked for by identity.
+let currentPullId = null;
+// null = follow the root cause. A number keeps the death you clicked, so the
+// two-second refresh does not snap the map back mid-sentence.
+let selectedDeath = null;
+
+function highlightDeath(idx) {
+  document.querySelectorAll("#deaths tr[data-death]").forEach(tr => {
+    tr.classList.toggle("selrow", Number(tr.dataset.death) === idx);
+  });
+}
+
+async function showDeathMap(index) {
+  if (currentPullId === null) return;
+  selectedDeath = index;
+  try {
+    const r = await fetch(`/api/pull/${currentPullId}/map/${index}`,
+                          {cache: "no-store"});
+    if (!r.ok) {
+      // A death with too few position samples has no map worth drawing.
+      $("map-when").textContent = "no position data for that death";
+      $("map").innerHTML = "";
+      highlightDeath(index);
+      return;
+    }
+    renderMap(await r.json());
+  } catch (e) { /* keep the current map */ }
+}
+
 function renderMap(m) {
   show("map-panel", !!m);
   if (!m) return;
-  $("map-when").textContent = `${m.victim} died to ${m.killer} at ${m.at}`;
+  const tag = m.cascade ? " — cascade death" : "";
+  $("map-when").textContent =
+    `${m.victim} died to ${m.killer} at ${m.at}${tag}`;
+  highlightDeath(m.death_index);
 
   const pts = m.markers;
   const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
@@ -312,6 +348,9 @@ function renderMap(m) {
 function renderLatest(d) {
   if (!d) { show("empty", true); show("verdict", false); return; }
   show("empty", false); show("verdict", true);
+  // A different pull means the previous selection is meaningless.
+  if (currentPullId !== d.id) selectedDeath = null;
+  currentPullId = d.id;
 
   const res = d.success
     ? `<span class="kill">KILL</span>`
@@ -322,7 +361,7 @@ function renderLatest(d) {
 
   renderFindings(d.findings || []);
 
-  renderMap(d.position_map);
+  if (selectedDeath === null) renderMap(d.position_map);
 
   const notes = d.notes || [];
   show("notes-panel", notes.length > 0);
@@ -340,10 +379,13 @@ function renderLatest(d) {
   $("deaths-summary").textContent =
     `${d.deaths_total} total · ${d.deaths_cascade} cascade · ${d.deaths_blameable} carry information`;
   $("deaths").innerHTML = (d.deaths || []).map(x => `
-    <tr class="${x.cascade ? "cascade" : ""}">
+    <tr data-death="${x.index}" class="${x.cascade ? "cascade" : ""}"
+        title="Click to see where everyone was standing">
       <td>${esc(x.at)}</td><td>${esc(x.name)}</td><td>${esc(x.role)}</td>
       <td>${esc(x.tag)}</td><td>${esc(x.killer)} <span class="muted">(${esc(x.source)})</span></td>
     </tr>`).join("");
+  highlightDeath(selectedDeath !== null ? selectedDeath
+    : (d.position_map ? d.position_map.death_index : d.root_index));
 
   show("avoid-panel", (d.avoidable || []).length > 0);
   $("avoid").innerHTML = (d.avoidable || []).map(r => `
@@ -396,6 +438,10 @@ function updatePinBar(newerAvailable) {
     : "Showing an earlier attempt.";
 }
 
+$("deaths").addEventListener("click", ev => {
+  const tr = ev.target.closest("tr[data-death]");
+  if (tr) showDeathMap(Number(tr.dataset.death));
+});
 $("history").addEventListener("click", ev => {
   const li = ev.target.closest("li[data-id]");
   if (li) showPull(Number(li.dataset.id));
