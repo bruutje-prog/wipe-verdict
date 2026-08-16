@@ -51,6 +51,7 @@ def build_findings(
     out.extend(_early_deaths(report, session))
     out.extend(_cooldowns(report, session))
     out.extend(_shared(report))
+    out.extend(_soaks(report))
     out.extend(_interrupts_and_dispels(report))
     out.extend(_throughput(report))
 
@@ -411,6 +412,48 @@ def _shared(report: "PullReport") -> list[Finding]:
                 ),
                 scope="raid-wide",
                 config_ref=f"bosses.yaml -> shared_damage -> {spec.name}",
+            )
+        )
+    return out
+
+
+def _soaks(report: "PullReport") -> list[Finding]:
+    """Tears nobody stood in."""
+    out: list[Finding] = []
+    for s in report.soaks:
+        if s.missed <= 0:
+            continue
+        at = ", ".join(report.pull.fmt(t) for t in s.missed_at[:5])
+        top = sorted(s.soakers.items(), key=lambda kv: -kv[1])[:4]
+        evidence = [
+            f"{s.missed} of {s.total} imploded with nobody in them, at {at}",
+            f"each cost the whole raid about {s.fail_cost:,}, against "
+            f"{s.soak_cost:,} for the one player who soaks it",
+        ]
+        if top:
+            evidence.append(
+                "soaked by " + ", ".join(f"{n} x{c}" for n, c in top)
+                + " - taking that damage is the job, not a mistake"
+            )
+        out.append(
+            Finding(
+                rank_class=RANK_REPEATED if s.missed > 1 else RANK_COOLDOWN,
+                score=float(s.missed * 20),
+                action=(
+                    f"Cover every {s.name} - {s.missed} went unsoaked and hit "
+                    f"the whole raid."
+                ),
+                evidence=evidence,
+                method="bursts of the failure spell, which only fires when a "
+                       "tear implodes with no one inside it",
+                rejected=(
+                    "counting soak damage as avoidable, which blames the people "
+                    "standing in it on purpose, and counting the raid-wide "
+                    "punishment as avoidable, which blames 25 players for one "
+                    "tear nobody covered"
+                ),
+                scope="raid-wide",
+                config_ref=f"bosses.yaml -> soaks -> {s.name}",
             )
         )
     return out

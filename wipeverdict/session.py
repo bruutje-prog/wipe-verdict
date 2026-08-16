@@ -20,6 +20,7 @@ from .analysis import (
     MissedDispel,
     MissedInterrupt,
     SharedBurst,
+    SoakReport,
     absorb_usage,
     avoidable_table,
     cooldown_coverage,
@@ -28,6 +29,7 @@ from .analysis import (
     missed_dispels,
     missed_interrupts,
     shared_bursts,
+    soak_report,
 )
 from .config import BossConfig, Config, load_config
 from .deaths import WipeVerdict, verdict
@@ -131,6 +133,7 @@ class PullReport:
     windows: list[DamageWindow] = field(default_factory=list)
     absorbs: list[AbsorbUsage] = field(default_factory=list)
     shared: list[SharedBurst] = field(default_factory=list)
+    soaks: list[SoakReport] = field(default_factory=list)
     delta: Optional[PullDelta] = None
     repeated: list[RepeatedFailure] = field(default_factory=list)
     #: the boss's mechanic config, so findings can check what is actually
@@ -205,6 +208,7 @@ class Session:
             interrupts=missed_interrupts(pull, boss, cfg, roles),
             absorbs=absorb_usage(pull, cfg, roles),
             shared=shared_bursts(pull, boss),
+            soaks=soak_report(pull, boss),
             boss=boss,
         )
         report.windows = cooldown_coverage(pull, cfg, damage_windows(pull))

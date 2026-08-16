@@ -575,6 +575,108 @@ class TestSharedDamage(unittest.TestCase):
         )
 
 
+class TestSoaks(unittest.TestCase):
+    """Standing in it is the job. The failure is nobody standing in it."""
+
+    def _soak_pull(self, soaks, fails):
+        """soaks: [(t, [guids])]  fails: [(t, n_players)]"""
+        p = _pull(300.0)
+        p.encounter_id = 1595
+        p.boss = "Malkorok"
+        p.players = {f"P{i}": f"P{i}" for i in range(25)}
+        def hit(t, guid, spell, amount):
+            p.damage_taken.append(
+                DamageRecord(
+                    t=t, dest_guid=guid, dest_name=guid, src_guid="Creature-1",
+                    src_name="Malkorok", spell_id=spell,
+                    spell_name="Imploding Energy", amount=amount, absorbed=0,
+                    overkill=-1, periodic=False, hp_after=0.7,
+                )
+            )
+        for t, guids in soaks:
+            for g in guids:
+                hit(t, g, 142986, 585_000)
+        for t, n in fails:
+            for i in range(n):
+                hit(t, f"P{i}", 142987, 688_500)
+        return p
+
+    def test_soak_damage_is_never_counted_as_avoidable(self):
+        """Counting it blames the people doing the job."""
+        cfg = load_config()
+        boss = cfg.boss(1595)
+        self.assertNotIn(142986, boss.avoidable, "soak damage must not be avoidable")
+        self.assertNotIn(142987, boss.avoidable, "raid punishment must not be avoidable")
+        self.assertIn(142986, boss.soaks)
+
+        p = self._soak_pull([(30.0, ["P1", "P2"])], [])
+        rows = avoidable_table(p, boss, detect_roles(p))
+        self.assertEqual(rows, [], "soaking must produce no avoidable rows")
+
+    def test_missed_soak_is_reported_and_soakers_are_credited(self):
+        cfg = load_config()
+        p = self._soak_pull(
+            [(30.0, ["P1", "P2"]), (60.0, ["P1", "P3"])],
+            [(90.0, 24)],
+        )
+        report = Session(cfg).add(p)
+        s = report.soaks[0]
+        self.assertEqual(s.soaked, 2)
+        self.assertEqual(s.missed, 1)
+        self.assertEqual(s.soakers.get("P1"), 2)
+
+        f = [x for x in report.findings if "unsoaked" in x.action]
+        self.assertTrue(f, "a missed soak must be reported")
+        joined = " ".join(f[0].evidence)
+        self.assertIn("P1", joined, "soakers must be credited")
+        self.assertIn("not a mistake", joined)
+
+    def test_all_soaked_produces_no_finding(self):
+        cfg = load_config()
+        p = self._soak_pull([(30.0, ["P1"]), (60.0, ["P2"])], [])
+        report = Session(cfg).add(p)
+        self.assertFalse([x for x in report.findings if "unsoaked" in x.action])
+
+
+class TestAmountThreshold(unittest.TestCase):
+    """One spell id can carry an avoidable and an unavoidable component."""
+
+    def _pull_with_hits(self, amounts):
+        p = _pull(300.0)
+        p.players = {"A": "A"}
+        for i, amt in enumerate(amounts):
+            p.damage_taken.append(
+                DamageRecord(
+                    t=float(i * 5), dest_guid="A", dest_name="A",
+                    src_guid="Creature-1", src_name="Garrosh", spell_id=144017,
+                    spell_name="Toxic Storm", amount=amt, absorbed=0,
+                    overkill=-1, periodic=False, hp_after=0.8,
+                )
+            )
+        return p
+
+    def test_threshold_keeps_only_the_bigger_component(self):
+        from wipeverdict.config import Mechanic
+
+        cfg = load_config()
+        boss = cfg.boss(1606)
+        p = self._pull_with_hits([180_000, 190_000, 320_000, 360_000])
+        roles = detect_roles(p)
+
+        # Without a threshold every hit counts.
+        rows = avoidable_table(p, boss, roles)
+        self.assertEqual(next(r.count for r in rows if r.spell_id == 144017), 4)
+
+        # With one, only the hits above it do.
+        boss.avoidable[144017] = Mechanic(
+            spell_id=144017, name="Toxic Storm", amount_at_least=280_000
+        )
+        rows = avoidable_table(p, boss, roles)
+        row = next(r for r in rows if r.spell_id == 144017)
+        self.assertEqual(row.count, 2)
+        self.assertEqual(row.damage, 680_000, "damage must exclude filtered hits")
+
+
 class TestConfig(unittest.TestCase):
     def test_both_progression_bosses_are_configured(self):
         cfg = load_config()

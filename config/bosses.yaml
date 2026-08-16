@@ -146,8 +146,6 @@ bosses:
     seeded_from: "25 Heroic, 2026-07-05 (13 pulls)"
 
     avoidable:
-      - {spell_id: 142987, name: "Imploding Energy",   count: hits}
-      - {spell_id: 142986, name: "Imploding Energy",   count: hits}
       - {spell_id: 142816, name: "Breath of Y'Shaarj", count: hits}
       - {spell_id: 142815, name: "Arcing Smash",       count: hits}
       - {spell_id: 142849, name: "Seismic Slam",       count: hits}
@@ -156,6 +154,22 @@ bosses:
       - {spell_id: 142913, name: "Displaced Energy",   count: hits}
     # OMITTED as unavoidable: Essence of Y'Shaarj (143857) and Ancient Miasma
     # (142906).
+
+    # Malkorok opens tears (7 per cast in 25-player) that must be stood in.
+    # Soaking one costs the soaker; letting one implode unsoaked costs the
+    # WHOLE RAID. Both halves log as "Imploding Energy" under different ids,
+    # and the guild's own logs match the tooltip exactly:
+    #   142986 - the soak. Median 2 players per burst (range 1-7, i.e. the
+    #            tears), median damage exactly 585,000.
+    #   142987 - the failure. Median 14 players and up to 24, median damage
+    #            728,089, which is the 688,500 raid-wide punishment at heroic.
+    # Both were previously in the avoidable list, which was wrong twice over:
+    # it blamed soakers for soaking, and blamed all 25 raiders for one tear
+    # nobody covered.
+    soaks:
+      - {spell_id: 142986, name: "Imploding Energy", fail_spell_id: 142987,
+         per_cast: 7,
+         note: "soaking is correct play and is never counted against anyone"}
 
     # Unavoidable, but SPLIT between everyone it hits, so it is not nothing:
     # the fewer players soak it, the harder each one is hit. Not a positioning
@@ -247,19 +261,29 @@ bosses:
     # OMITTED as unavoidable: Whirling Corruption (144989 - 1112 hits on all
     # 28 raiders).
     #
-    # ANNIHILATE (144969) - UNRESOLVED, pending a call from the raid leader.
-    # Two things the logs do say, from the 09/08 and 30/06 pulls:
-    #   * It is NOT shared damage. Per-player damage stays flat at ~280k (25N)
-    #     and ~200-230k (10N) whether 25, 20, 16, 8 or 2 players are hit. If it
-    #     were split, two players would each take roughly twelve times what
-    #     twenty-five do. So it does not belong in shared_damage.
-    #   * It probably CAN be escaped. It repeats in bursts about 3s apart, and
-    #     within one sequence the number hit fell 25 -> 25 -> 20 -> 20 -> 16
-    #     during a pull that had only ONE death in total, so the decline is
-    #     people moving out of it rather than people dying.
-    # If it is escapable it belongs in avoidable, but it opens by hitting
-    # almost everyone, so expect the config-check note to flag it. Left out
-    # until confirmed rather than guessed at.
+    # ANNIHILATE (144969) is TWO mechanics under one spell id: an avoidable
+    # frontal cone and an unavoidable raid-wide pulse (raid leader, 16/08).
+    # Only the cone is anybody's mistake, and the log offers no clean way to
+    # tell the two apart:
+    #   * one spell id covers both - there is no second id to key on
+    #   * it is not shared damage: per-player damage is flat whether 25 or 2
+    #     players are hit, where a split would be about twelve times
+    #   * position does not separate them either. Hits inside a 120-degree
+    #     frontal arc measured LOWER median damage (180k) than hits outside it
+    #     (259k), and big and small hits sat at near-identical median angles
+    #     (113 vs 106 degrees). Garrosh turns constantly, so his sampled facing
+    #     cannot reconstruct where the cone pointed when it fired.
+    #
+    # What the log does show is a bimodal damage split: a cluster around
+    # 150-200k and another around 300-380k. If the cone is the harder hit, add
+    # the entry below with a threshold between the two clusters, which counts
+    # only the cone and ignores the pulse:
+    #
+    #   - {spell_id: 144969, name: "Annihilate (cone)", count: hits,
+    #      amount_at_least: 280000}
+    #
+    # Left commented out because which cluster is the cone is a call about the
+    # fight, not something these numbers decide.
 
     tank_busters:
       # 100% of hits land on tanks: this is the tank debuff, not a positioning

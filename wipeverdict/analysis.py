@@ -153,6 +153,11 @@ def avoidable_table(
         mech = boss.is_avoidable(d.spell_id)
         if mech is None:
             continue
+        # One spell id can carry both an avoidable and an unavoidable
+        # component. A configured threshold keeps only the half that is worth
+        # reporting; without one nothing is filtered.
+        if mech.amount_at_least and (d.amount + d.absorbed) < mech.amount_at_least:
+            continue
         key = (d.dest_guid, d.spell_id)
         damage[key] += d.amount + d.absorbed
         if not mech.by_applications:
@@ -296,6 +301,89 @@ def _burst(
         total=total,
         alive=alive_at(pull, t),
     )
+
+
+# ---------------------------------------------------------------------------
+# Soaks
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class SoakReport:
+    spell_id: int
+    name: str
+    #: bursts of the soak spell -- each is a tear somebody stood in
+    soaked: int
+    #: bursts of the failure spell -- each is a tear nobody stood in
+    missed: int
+    #: when the failures happened
+    missed_at: list[float]
+    #: cost to the raid, per player, of a typical failure
+    fail_cost: int
+    #: cost to the soaker of taking one, the intended trade
+    soak_cost: int
+    #: who soaked, by name -- credit, never blame
+    soakers: dict[str, int]
+
+    @property
+    def total(self) -> int:
+        return self.soaked + self.missed
+
+
+def soak_report(
+    pull: "Pull", boss: Optional[BossConfig], window: float = SHARED_WINDOW_S
+) -> list[SoakReport]:
+    """Count tears soaked and tears missed.
+
+    Taking soak damage is correct play, so it is reported as credit and never
+    as an avoidable hit. The failure spell is the thing worth counting: one
+    tear nobody covered hits the entire raid.
+    """
+    if boss is None or not boss.soaks:
+        return []
+
+    def bursts(spell_id: int) -> list[list]:
+        hits = sorted(
+            (d for d in pull.damage_taken if d.spell_id == spell_id),
+            key=lambda d: d.t,
+        )
+        if not hits:
+            return []
+        out, cluster = [], [hits[0]]
+        for h in hits[1:]:
+            if h.t - cluster[-1].t <= window:
+                cluster.append(h)
+            else:
+                out.append(cluster)
+                cluster = [h]
+        out.append(cluster)
+        return out
+
+    reports: list[SoakReport] = []
+    for spell_id, spec in boss.soaks.items():
+        good = bursts(spell_id)
+        bad = bursts(spec.fail_spell_id)
+        soakers: dict[str, int] = defaultdict(int)
+        for c in good:
+            for guid in {h.dest_guid for h in c}:
+                soakers[pull.players.get(guid, guid)] += 1
+        fail_costs = [
+            int(sum(h.amount + h.absorbed for h in c) / max(1, len({x.dest_guid for x in c})))
+            for c in bad
+        ]
+        soak_costs = [h.amount + h.absorbed for c in good for h in c]
+        reports.append(
+            SoakReport(
+                spell_id=spell_id,
+                name=spec.name,
+                soaked=len(good),
+                missed=len(bad),
+                missed_at=[c[0].t for c in bad],
+                fail_cost=int(sorted(fail_costs)[len(fail_costs) // 2]) if fail_costs else 0,
+                soak_cost=int(sorted(soak_costs)[len(soak_costs) // 2]) if soak_costs else 0,
+                soakers=dict(soakers),
+            )
+        )
+    return reports
 
 
 # ---------------------------------------------------------------------------

@@ -30,6 +30,12 @@ class Mechanic:
     #: roles that cannot avoid this and must not be counted as having failed.
     #: A frontal breath is unavoidable for whoever is holding the boss.
     exempt_roles: tuple[str, ...] = ()
+    #: Ignore hits below this damage. Some abilities put an avoidable component
+    #: and an unavoidable one under ONE spell id -- Garrosh's Annihilate is a
+    #: frontal cone plus a raid-wide pulse -- and the log gives no other way to
+    #: tell them apart. A threshold lets whoever knows the fight separate them
+    #: instead of the tool guessing.
+    amount_at_least: int = 0
 
     @property
     def by_applications(self) -> bool:
@@ -56,6 +62,24 @@ class SharedMechanic:
 
 
 @dataclass(slots=True)
+class SoakMechanic:
+    """Something a player must deliberately stand in.
+
+    Taking the soak damage is CORRECT PLAY, so it must never appear in the
+    avoidable table -- that penalises the people doing the job. The failure is
+    a separate spell that punishes the whole raid, and it is the one worth
+    counting: one missed tear, twenty-five people hit.
+    """
+
+    spell_id: int          # damage to the soaker
+    name: str
+    fail_spell_id: int     # raid-wide damage when nobody soaked
+    #: tears opened per cast, when known; only used for reporting
+    per_cast: int = 0
+    note: str = ""
+
+
+@dataclass(slots=True)
 class TankBuster:
     spell_id: int
     name: str
@@ -77,6 +101,7 @@ class BossConfig:
     boss_units: list[str] = field(default_factory=list)
     avoidable: dict[int, Mechanic] = field(default_factory=dict)
     shared: dict[int, SharedMechanic] = field(default_factory=dict)
+    soaks: dict[int, SoakMechanic] = field(default_factory=dict)
     tank_busters: dict[int, TankBuster] = field(default_factory=dict)
     interruptible: dict[int, Interruptible] = field(default_factory=dict)
     seeded_from: str = ""
@@ -163,6 +188,7 @@ def load_config(config_dir: Optional[Path | str] = None) -> Config:
                     count=row.get("count", COUNT_HITS),
                     note=row.get("note", ""),
                     exempt_roles=tuple(row.get("exempt_roles") or ()),
+                    amount_at_least=_as_int(row.get("amount_at_least"), 0),
                 )
                 if m.count not in (COUNT_HITS, COUNT_APPLICATIONS):
                     raise ValueError(
@@ -178,6 +204,20 @@ def load_config(config_dir: Optional[Path | str] = None) -> Config:
                     note=row.get("note", ""),
                 )
                 boss.shared[sm.spell_id] = sm
+            for row in body.get("soaks") or []:
+                sk = SoakMechanic(
+                    spell_id=_as_int(row.get("spell_id")),
+                    name=row.get("name", "?"),
+                    fail_spell_id=_as_int(row.get("fail_spell_id")),
+                    per_cast=_as_int(row.get("per_cast"), 0),
+                    note=row.get("note", ""),
+                )
+                if not sk.fail_spell_id:
+                    raise ValueError(
+                        f"{key}/{sk.name}: a soak needs fail_spell_id, the spell "
+                        f"that punishes the raid when nobody stands in it"
+                    )
+                boss.soaks[sk.spell_id] = sk
             for row in body.get("tank_busters") or []:
                 tb = TankBuster(
                     spell_id=_as_int(row.get("spell_id")),
