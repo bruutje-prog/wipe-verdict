@@ -1,0 +1,85 @@
+# Wipe Verdict -- per-boss mechanics.
+#
+# EVERY spell id here was read out of this guild's own combat logs (see
+# tools/mine_spells.py), never from a spell database, so they are guaranteed to
+# match this client build. Regenerate candidates for a new boss with:
+#
+#     python tools/mine_spells.py <logfile> <encounter_id>
+#
+# This file is meant to be edited by a raider, not a developer. If the tool
+# says something wrong about a mechanic, the fix is almost always here rather
+# than in the code.
+#
+# Fields
+# ------
+#   avoidable      damage a player should not be taking at all. Each hit is a
+#                  leading indicator that someone is about to die.
+#   count:         `hits`         - count every damage event (default)
+#                  `applications` - count debuff applications instead.
+#                  Use `applications` for anything that ticks. A damage-over-
+#                  time mechanic logs hundreds of ticks and would otherwise
+#                  drown out every real mistake -- the same trap as counting a
+#                  channelled spell's ticks as casts.
+#   tank_busters   big hits aimed at the current threat target.
+#   expect_cooldown  true if a tank should have a defensive up for it; drives
+#                  the "died with no cooldown used" verdict.
+#   interruptible  enemy casts the raid is expected to stop.
+#   verified:      false means "this had a cast bar in the log, but nobody has
+#                  confirmed it can actually be interrupted". Findings from
+#                  unverified entries are labelled as such rather than asserted.
+
+schema_version: 1
+
+bosses:
+
+  korkron_dark_shaman:
+    encounter_id: 1606
+    display_name: "Kor'kron Dark Shaman"
+    # Two bosses share the encounter; both must die.
+    boss_units: ["Earthbreaker Haromm", "Wavebinder Kardris"]
+
+    avoidable:
+      - {spell_id: 144017, name: "Toxic Storm",   count: hits}
+      - {spell_id: 144030, name: "Toxic Tornado", count: hits}
+      - {spell_id: 143987, name: "Falling Ash",   count: hits}
+      - {spell_id: 144334, name: "Iron Tomb",     count: hits}
+      - {spell_id: 144331, name: "Iron Prison",   count: hits}
+      - {spell_id: 143993, name: "Foul Geyser",   count: hits}
+      # Ticking pools. 708 ticks across 21 players in one pull -- counted by
+      # application, or this single mechanic outweighs everything else.
+      - {spell_id: 144089, name: "Toxic Mist", count: applications}
+      - {spell_id: 144066, name: "Foulness",   count: applications}
+      - {spell_id: 144090, name: "Foul Stream", count: applications}
+
+    tank_busters:
+      - {spell_id: 144215, name: "Froststorm Strike", expect_cooldown: true}
+      - {spell_id: 144214, name: "Froststorm Bolt",   expect_cooldown: false}
+
+    interruptible:
+      - {spell_id: 144214, name: "Froststorm Bolt", verified: false}
+
+  siegecrafter_blackfuse:
+    encounter_id: 1601
+    display_name: "Siegecrafter Blackfuse"
+    boss_units: ["Siegecrafter Blackfuse"]
+    # Seeded from a 25 Normal kill (8/9) -- the guild has no heroic Blackfuse
+    # logged yet. Spell ids do not change with difficulty, so these are valid;
+    # the damage numbers behind them are not heroic numbers.
+    seeded_from: "25 Normal, 2026-08-09"
+
+    avoidable:
+      - {spell_id: 145444, name: "Overload",        count: hits}
+      - {spell_id: 143002, name: "Detonate!",       count: hits}
+      - {spell_id: 143327, name: "Serrated Slash",  count: hits}
+      - {spell_id: 144210, name: "Death From Above", count: hits}
+      - {spell_id: 143856, name: "Superheated",     count: applications}
+
+    tank_busters:
+      - {spell_id: 143385, name: "Electrostatic Charge", expect_cooldown: true}
+      # Magnetic Crush is a stacking tank debuff, not avoidable damage. It is
+      # deliberately NOT in the avoidable list: 468 hits in one pull would make
+      # every tank look like the worst player in the raid.
+      - {spell_id: 144466, name: "Magnetic Crush", expect_cooldown: false}
+
+    interruptible:
+      - {spell_id: 143265, name: "Launch Sawblade", verified: false}

@@ -1,0 +1,126 @@
+# Wipe Verdict -- class and raid mechanics that are not boss-specific.
+#
+# These encode judgements that were wrong at least once in manual review. Each
+# carries the reason, because the reason is what stops it being "corrected"
+# back to the broken version later.
+
+schema_version: 1
+
+# ---------------------------------------------------------------------------
+# Raid cooldowns. `cooldown_s` is what makes "used 3 seconds late" possible to
+# say -- without it we could only say "used once", which is not actionable.
+# ---------------------------------------------------------------------------
+raid_cooldowns:
+  - {name: "Healing Tide Totem",   cooldown_s: 180, spec: "restoration shaman"}
+  - {name: "Spirit Link Totem",    cooldown_s: 180, spec: "restoration shaman"}
+  - {name: "Power Word: Barrier",  cooldown_s: 180, spec: "discipline priest"}
+  - {name: "Divine Hymn",          cooldown_s: 180, spec: "holy priest"}
+  - {name: "Tranquility",          cooldown_s: 180, spec: "restoration druid"}
+  - {name: "Rallying Cry",         cooldown_s: 180, spec: "warrior"}
+  - {name: "Devotion Aura",        cooldown_s: 180, spec: "holy paladin"}
+  - {name: "Anti-Magic Zone",      cooldown_s: 120, spec: "death knight"}
+  - {name: "Smoke Bomb",           cooldown_s: 180, spec: "rogue"}
+
+# ---------------------------------------------------------------------------
+# Absorb shields end when they are CONSUMED, not when they expire.
+#
+# A tank under heavy melee will always show low Guard uptime no matter how well
+# it is played, so low uptime can mean the absorb is doing its job. Measuring
+# these by uptime produced a wrong finding three separate times in manual
+# review before a raider caught it.
+#
+# The tool refuses to compute uptime for anything listed here (see
+# findings.assert_metric_valid) and measures cast rate against cooldown instead.
+# ---------------------------------------------------------------------------
+consumed_absorbs:
+  - {name: "Guard",             cooldown_s: 30,  spec: "brewmaster monk"}
+  # cooldown_s is 0 on purpose. Weakened Soul is a PER-TARGET debuff, not a
+  # personal cooldown, so "casts available = fight length / 6s" is a fiction --
+  # it implied a priest should cast 36 shields in 3 minutes and produced a
+  # confident wrong finding the first time this ran. No honest denominator
+  # exists, so no target is claimed.
+  - {name: "Power Word: Shield", cooldown_s: 0,  spec: "priest",
+     note: "gated by per-target Weakened Soul, not a personal cooldown; cast count alone says nothing"}
+  - {name: "Blood Shield",      cooldown_s: 0,   spec: "blood death knight",
+     note: "a by-product of Death Strike; measure Death Strike cast rate instead"}
+  - {name: "Divine Aegis",      cooldown_s: 0,   spec: "discipline priest",
+     note: "procs from crits; not directly castable"}
+  - {name: "Sacred Shield",     cooldown_s: 0,   spec: "protection paladin"}
+  - {name: "Shield Barrier",    cooldown_s: 0,   spec: "protection warrior"}
+
+# ---------------------------------------------------------------------------
+# Metrics that are downstream of incoming damage, and therefore correlate with
+# deaths for reasons that have nothing to do with player skill.
+#
+# A high-damage pull eats shields faster AND kills people. Two metrics moving
+# together does not mean one caused the other. Prefer the substitute.
+# ---------------------------------------------------------------------------
+confounded_metrics:
+  - metric: "Blood Shield uptime"
+    confound: "rises and falls with incoming damage"
+    prefer: "Death Strike cast rate"
+  - metric: "absorb consumed per second"
+    confound: "rises with raid damage taken regardless of play"
+    prefer: "shield cast rate against cooldown"
+
+# ---------------------------------------------------------------------------
+# Cooldown pairings that must NOT be recommended together.
+#
+# Balance druid: Incarnation amplifies an Eclipse you are already in, while
+# Celestial Alignment grants both Eclipse bonuses when you have none. Used
+# together, one of them is wasted. They must be sequenced, not stacked.
+#
+# Any future "stack these cooldowns" suggestion has to be checked against this
+# list per spec, never assumed.
+# ---------------------------------------------------------------------------
+non_stacking:
+  - spec: "balance druid"
+    abilities: ["Celestial Alignment", "Incarnation: Chosen of Elune"]
+    reason: >-
+      Incarnation amplifies the Eclipse you are in; Celestial Alignment grants
+      Eclipse bonuses when you have none. Overlapping them wastes one. Sequence
+      them instead.
+
+# ---------------------------------------------------------------------------
+# Abilities whose cast count is a bad signal, because another spell refreshes
+# them or a talent changes their cost. A low count here is not a mistake.
+# ---------------------------------------------------------------------------
+refreshed_by_other_spells:
+  - {ability: "Serpent Sting", refreshed_by: "Cobra Shot", spec: "marksmanship hunter"}
+  - {ability: "Serpent Sting", refreshed_by: "Cobra Shot", spec: "beast mastery hunter"}
+  - {ability: "Rip",           refreshed_by: "Ferocious Bite", spec: "feral druid"}
+
+# ---------------------------------------------------------------------------
+# Deaths that are a talent working as intended. Dying "to" these bought the
+# raid time; report the reprieve that was not converted, not a death.
+# ---------------------------------------------------------------------------
+reprieve_talents:
+  - {name: "Cauterize",      spec: "mage",         grace_s: 6}
+  - {name: "Ardent Defender", spec: "protection paladin", grace_s: 10}
+  - {name: "Guardian Spirit", spec: "holy priest", grace_s: 10}
+  - {name: "Purgatory",       spec: "blood death knight", grace_s: 3}
+
+# ---------------------------------------------------------------------------
+# Interrupt abilities and their cooldowns, used to work out who was actually
+# available when an interruptible cast went through.
+#
+# Caveat this tool cannot remove: the log does not say whether a player was in
+# RANGE of the caster. "Available" here means off cooldown and alive only, and
+# every finding derived from it says so.
+# ---------------------------------------------------------------------------
+interrupt_abilities:
+  - {name: "Kick",              cooldown_s: 15, spec: "rogue"}
+  - {name: "Pummel",            cooldown_s: 15, spec: "warrior"}
+  - {name: "Rebuke",            cooldown_s: 15, spec: "paladin"}
+  - {name: "Mind Freeze",       cooldown_s: 15, spec: "death knight"}
+  - {name: "Skull Bash",        cooldown_s: 15, spec: "druid"}
+  - {name: "Wind Shear",        cooldown_s: 12, spec: "shaman"}
+  - {name: "Counterspell",      cooldown_s: 24, spec: "mage"}
+  - {name: "Spear Hand Strike", cooldown_s: 15, spec: "monk"}
+  - {name: "Silencing Shot",    cooldown_s: 24, spec: "marksmanship hunter"}
+  - {name: "Solar Beam",        cooldown_s: 60, spec: "balance druid"}
+  - {name: "Disrupting Shout",  cooldown_s: 40, spec: "warrior"}
+  - {name: "Spell Lock",        cooldown_s: 24, spec: "warlock"}
+  - {name: "Optical Blast",     cooldown_s: 24, spec: "warlock"}
+  - {name: "Axe Toss",          cooldown_s: 30, spec: "demonology warlock"}
+  - {name: "Arcane Torrent",    cooldown_s: 120, spec: "blood elf"}

@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wipe Verdict</title>
+<style>
+  :root {
+    --bg: #12141a;
+    --panel: #1a1d26;
+    --panel-2: #21252f;
+    --line: #2e3340;
+    --text: #e7e9ef;
+    --dim: #939aab;
+    --accent: #ffb648;
+    --good: #63d68b;
+    --bad: #ff6b6b;
+    --cascade: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 16px;
+    padding: 14px 22px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 17px; margin: 0; letter-spacing: .5px; }
+  header .status { color: var(--dim); font-size: 13px; margin-left: auto; }
+  .live-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--good); margin-right: 6px; vertical-align: middle;
+  }
+  .wrap { display: grid; grid-template-columns: 1fr 300px; gap: 18px; padding: 18px 22px; }
+  @media (max-width: 1100px) { .wrap { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px 18px; margin-bottom: 18px;
+  }
+  .panel h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--dim); margin: 0 0 12px; font-weight: 600;
+  }
+  .pulltitle { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .pulltitle .kill { color: var(--good); }
+  .pulltitle .wipe { color: var(--bad); }
+  .headline { font-size: 17px; line-height: 1.45; color: var(--text); }
+  .muted { color: var(--dim); }
+
+  ol.findings { list-style: none; counter-reset: f; margin: 0; padding: 0; }
+  ol.findings > li {
+    counter-increment: f; position: relative;
+    padding: 12px 0 12px 40px; border-top: 1px solid var(--line);
+  }
+  ol.findings > li:first-child { border-top: none; }
+  ol.findings > li::before {
+    content: counter(f); position: absolute; left: 0; top: 12px;
+    width: 26px; height: 26px; border-radius: 6px; background: var(--accent);
+    color: #1a1206; font-weight: 700; text-align: center; line-height: 26px;
+  }
+  .action { font-size: 16px; font-weight: 600; }
+  .tag {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+    color: var(--dim); border: 1px solid var(--line); border-radius: 4px;
+    padding: 1px 6px; margin-left: 8px; white-space: nowrap;
+  }
+  ul.evidence { margin: 8px 0 0; padding-left: 18px; color: var(--dim); font-size: 14px; }
+  .method { font-size: 12.5px; color: #7d8497; margin-top: 6px; }
+  .method b { color: #98a0b3; font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    text-align: left; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .8px; color: var(--dim); font-weight: 600;
+    padding: 4px 8px 8px 0; border-bottom: 1px solid var(--line);
+  }
+  td { padding: 5px 8px 5px 0; border-bottom: 1px solid #23262f; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.cascade td { color: var(--cascade); }
+  .pill {
+    font-size: 11px; border-radius: 4px; padding: 1px 6px;
+    background: var(--panel-2); color: var(--dim);
+  }
+  .hist { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+  .hist li {
+    display: flex; gap: 8px; align-items: baseline;
+    padding: 7px 0; border-bottom: 1px solid #23262f;
+  }
+  .hist .pct { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .empty { color: var(--dim); padding: 30px 0; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>WIPE VERDICT</h1>
+  <span class="muted" id="boss-now"></span>
+  <span class="status"><span class="live-dot" id="dot"></span><span id="status">connecting…</span></span>
+</header>
+
+<div class="wrap">
+  <main>
+    <div class="panel" id="verdict-panel">
+      <div class="empty" id="empty">Waiting for a pull to finish…</div>
+      <div id="verdict" style="display:none">
+        <div class="pulltitle" id="pull-title"></div>
+        <div class="headline" id="headline"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="findings-panel" style="display:none">
+      <h2>What to change before the next pull</h2>
+      <ol class="findings" id="findings"></ol>
+    </div>
+
+    <div class="panel" id="notes-panel" style="display:none">
+      <h2>Notes on the config — not raid actions</h2>
+      <ul class="evidence" id="notes"></ul>
+    </div>
+
+    <div class="panel" id="delta-panel" style="display:none">
+      <h2>Versus best previous attempt</h2>
+      <div class="muted" id="delta-vs"></div>
+      <ul class="evidence" id="delta-lines"></ul>
+    </div>
+
+    <div class="panel" id="deaths-panel" style="display:none">
+      <h2>Deaths <span id="deaths-summary" class="pill"></span></h2>
+      <table><thead><tr>
+        <th>At</th><th>Player</th><th>Role</th><th>Classification</th><th>Killing blow</th>
+      </tr></thead><tbody id="deaths"></tbody></table>
+    </div>
+
+    <div class="panel" id="avoid-panel" style="display:none">
+      <h2>Avoidable damage — hits are the leading indicator</h2>
+      <table><thead><tr>
+        <th>Player</th><th>Role</th><th>Mechanic</th>
+        <th class="num">Hits</th><th class="num">Damage</th><th>Counted by</th>
+      </tr></thead><tbody id="avoid"></tbody></table>
+    </div>
+  </main>
+
+  <aside>
+    <div class="panel">
+      <h2>Tonight</h2>
+      <ul class="hist" id="history"><li class="muted">No pulls yet</li></ul>
+    </div>
+    <div class="panel">
+      <h2>Source</h2>
+      <div class="muted" style="font-size:12.5px;word-break:break-all" id="logpath"></div>
+      <div class="muted" style="font-size:12.5px;margin-top:6px" id="lines"></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = n => (n ?? 0).toLocaleString();
+
+function show(id, on) { $(id).style.display = on ? "" : "none"; }
+
+function renderFindings(list) {
+  show("findings-panel", list.length > 0);
+  $("findings").innerHTML = list.map(f => {
+    const ev = (f.evidence || []).map(e => `<li>${esc(e)}</li>`).join("");
+    let method = "";
+    if (f.method) method += `<div class="method"><b>method:</b> ${esc(f.method)}</div>`;
+    if (f.rejected) method += `<div class="method"><b>not measured by:</b> ${esc(f.rejected)}</div>`;
+    if (f.config_ref) method += `<div class="method"><b>config:</b> ${esc(f.config_ref)}</div>`;
+    return `<li>
+      <span class="action">${esc(f.action)}</span>
+      <span class="tag">${esc(f.rank_name)}</span>
+      ${ev ? `<ul class="evidence">${ev}</ul>` : ""}
+      ${method}
+    </li>`;
+  }).join("");
+}
+
+function renderLatest(d) {
+  if (!d) { show("empty", true); show("verdict", false); return; }
+  show("empty", false); show("verdict", true);
+
+  const res = d.success
+    ? `<span class="kill">KILL</span>`
+    : `<span class="wipe">WIPE${d.boss_percent != null ? " at " + d.boss_percent.toFixed(1) + "%" : ""}</span>`;
+  $("pull-title").innerHTML =
+    `${esc(d.boss)} <span class="muted">(${esc(d.difficulty)})</span> — pull ${d.attempt} — ${esc(d.duration)} — ${res}`;
+  $("headline").textContent = d.headline;
+
+  renderFindings(d.findings || []);
+
+  const notes = d.notes || [];
+  show("notes-panel", notes.length > 0);
+  $("notes").innerHTML = notes.map(n =>
+    `<li>${esc(n.action)}${(n.evidence || []).map(e =>
+      `<div class="method">${esc(e)}</div>`).join("")}</li>`).join("");
+
+  show("delta-panel", !!d.delta);
+  if (d.delta) {
+    $("delta-vs").textContent = "compared to " + d.delta.compared_to;
+    $("delta-lines").innerHTML = d.delta.lines.map(l => `<li>${esc(l)}</li>`).join("");
+  }
+
+  show("deaths-panel", (d.deaths || []).length > 0);
+  $("deaths-summary").textContent =
+    `${d.deaths_total} total · ${d.deaths_cascade} cascade · ${d.deaths_blameable} carry information`;
+  $("deaths").innerHTML = (d.deaths || []).map(x => `
+    <tr class="${x.cascade ? "cascade" : ""}">
+      <td>${esc(x.at)}</td><td>${esc(x.name)}</td><td>${esc(x.role)}</td>
+      <td>${esc(x.tag)}</td><td>${esc(x.killer)} <span class="muted">(${esc(x.source)})</span></td>
+    </tr>`).join("");
+
+  show("avoid-panel", (d.avoidable || []).length > 0);
+  $("avoid").innerHTML = (d.avoidable || []).map(r => `
+    <tr><td>${esc(r.player)}</td><td>${esc(r.role)}</td><td>${esc(r.mechanic)}</td>
+    <td class="num">${r.count}</td><td class="num">${fmt(r.damage)}</td>
+    <td><span class="pill">${esc(r.counted_by)}</span></td></tr>`).join("");
+}
+
+async function tick() {
+  try {
+    const r = await fetch("/api/state", {cache: "no-store"});
+    const s = await r.json();
+    $("status").textContent = s.in_pull ? "in combat" : s.status;
+    $("dot").style.background = s.in_pull ? "var(--accent)" : "var(--good)";
+    $("boss-now").textContent = s.current_boss ? "· pulling " + s.current_boss : "";
+    $("logpath").textContent = s.log_path || "no log found";
+    $("lines").textContent = fmt(s.lines_seen) + " lines read";
+    $("history").innerHTML = (s.history || []).length
+      ? s.history.map(h => `<li>
+          <span>${esc(h.boss)}</span>
+          <span class="muted">#${h.attempt}</span>
+          <span class="pct ${h.success ? "" : "muted"}">${
+            h.success ? "KILL" : (h.percent != null ? h.percent.toFixed(1) + "%" : h.duration)
+          }</span></li>`).join("")
+      : `<li class="muted">No pulls yet</li>`;
+    renderLatest(s.latest);
+  } catch (e) {
+    $("status").textContent = "disconnected";
+    $("dot").style.background = "var(--bad)";
+  }
+}
+tick();
+setInterval(tick, 2000);
+</script>
+</body>
+</html>

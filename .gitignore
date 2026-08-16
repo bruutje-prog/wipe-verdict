@@ -1,0 +1,15 @@
+# Raid logs. These are hundreds of megabytes and contain the roster's character
+# names -- they are working data, not source. Regenerate samples with the awk
+# extraction in README/docs, or point the tools at the archive directly.
+samples/
+live/
+*.txt.log
+WoWCombatLog.txt
+Archive-WoWCombatLog-*.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
