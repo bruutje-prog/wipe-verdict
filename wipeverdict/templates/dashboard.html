@@ -84,9 +84,24 @@
   .hist { list-style: none; margin: 0; padding: 0; font-size: 14px; }
   .hist li {
     display: flex; gap: 8px; align-items: baseline;
-    padding: 7px 0; border-bottom: 1px solid #23262f;
+    padding: 7px 8px; margin: 0 -8px; border-bottom: 1px solid #23262f;
+    border-radius: 5px; cursor: pointer;
   }
+  .hist li:hover { background: var(--panel-2); }
+  .hist li.sel { background: #2b3446; box-shadow: inset 2px 0 0 var(--accent); }
   .hist .pct { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .pinbar {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 12px; padding: 8px 12px; border-radius: 7px;
+    background: #2b3446; border: 1px solid #3b475e; font-size: 13.5px;
+  }
+  .pinbar button {
+    margin-left: auto; background: var(--accent); color: #1a1206;
+    border: 0; border-radius: 5px; padding: 5px 12px;
+    font: inherit; font-weight: 600; cursor: pointer;
+  }
+  .pinbar button:hover { filter: brightness(1.08); }
+  .newpull { color: var(--accent); font-weight: 600; }
   .empty { color: var(--dim); padding: 30px 0; text-align: center; }
   .warn {
     margin: 14px 22px -4px; padding: 11px 15px; border-radius: 8px;
@@ -114,6 +129,10 @@
   <main>
     <div class="panel" id="verdict-panel">
       <div class="empty" id="empty">Waiting for a pull to finish…</div>
+      <div class="pinbar" id="pinbar" style="display:none">
+        <span id="pintext">Showing an earlier attempt.</span>
+        <button id="unpin" type="button">Back to latest</button>
+      </div>
       <div id="verdict" style="display:none">
         <div class="pulltitle" id="pull-title"></div>
         <div class="headline" id="headline"></div>
@@ -231,6 +250,59 @@ function renderLatest(d) {
     <td><span class="pill">${esc(r.counted_by)}</span></td></tr>`).join("");
 }
 
+// null = follow the live pull. A number pins an earlier attempt so that a
+// wipe landing while you are reading pull 3 does not yank the panel away.
+let pinnedId = null;
+let latestId = null;
+
+function renderHistory(history) {
+  if (!history.length) {
+    $("history").innerHTML = `<li class="muted">No pulls yet</li>`;
+    return;
+  }
+  $("history").innerHTML = history.map(h => {
+    const shown = pinnedId === null ? latestId : pinnedId;
+    const result = h.success
+      ? "KILL"
+      : (h.percent != null ? h.percent.toFixed(1) + "%" : h.duration);
+    return `<li data-id="${h.id}" class="${h.id === shown ? "sel" : ""}"
+      title="Click to revisit this attempt">
+      <span>${esc(h.boss)}</span>
+      <span class="muted">#${h.attempt}</span>
+      <span class="pct ${h.success ? "" : "muted"}">${result}</span>
+    </li>`;
+  }).join("");
+}
+
+async function showPull(id) {
+  try {
+    const r = await fetch(`/api/pull/${id}`, {cache: "no-store"});
+    if (!r.ok) return;
+    const d = await r.json();
+    pinnedId = (id === latestId) ? null : id;
+    renderLatest(d);
+    updatePinBar();
+  } catch (e) { /* leave the current view alone */ }
+}
+
+function updatePinBar(newerAvailable) {
+  show("pinbar", pinnedId !== null);
+  if (pinnedId === null) return;
+  $("pintext").innerHTML = newerAvailable
+    ? `Showing an earlier attempt. <span class="newpull">A newer pull has finished.</span>`
+    : "Showing an earlier attempt.";
+}
+
+$("history").addEventListener("click", ev => {
+  const li = ev.target.closest("li[data-id]");
+  if (li) showPull(Number(li.dataset.id));
+});
+$("unpin").addEventListener("click", () => {
+  pinnedId = null;
+  updatePinBar();
+  tick();
+});
+
 async function tick() {
   try {
     const r = await fetch("/api/state", {cache: "no-store"});
@@ -241,15 +313,18 @@ async function tick() {
     show("advwarn", s.advanced_logging === false);
     $("logpath").textContent = s.log_path || "no log found";
     $("lines").textContent = fmt(s.lines_seen) + " lines read";
-    $("history").innerHTML = (s.history || []).length
-      ? s.history.map(h => `<li>
-          <span>${esc(h.boss)}</span>
-          <span class="muted">#${h.attempt}</span>
-          <span class="pct ${h.success ? "" : "muted"}">${
-            h.success ? "KILL" : (h.percent != null ? h.percent.toFixed(1) + "%" : h.duration)
-          }</span></li>`).join("")
-      : `<li class="muted">No pulls yet</li>`;
-    renderLatest(s.latest);
+
+    const previousLatest = latestId;
+    latestId = s.latest ? s.latest.id : null;
+    renderHistory(s.history || []);
+
+    if (pinnedId === null) {
+      renderLatest(s.latest);
+      updatePinBar();
+    } else {
+      // Keep the pinned attempt on screen, but say a new one has landed.
+      updatePinBar(latestId !== null && latestId !== previousLatest);
+    }
   } catch (e) {
     $("status").textContent = "disconnected";
     $("dot").style.background = "var(--bad)";

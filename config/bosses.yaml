@@ -272,5 +272,9 @@ bosses:
       # every tank look like the worst player in the raid.
       - {spell_id: 144466, name: "Magnetic Crush", expect_cooldown: false}
 
-    interruptible:
-      - {spell_id: 143265, name: "Launch Sawblade", verified: false}
+    # Launch Sawblade (143265) was seeded here as an unverified candidate
+    # because it has a cast bar. Confirmed by the raid leader on 16/08 that it
+    # CANNOT be interrupted, so the tool was telling the raid to set a rotation
+    # for something impossible. Removed -- do not re-add from cast-bar evidence
+    # alone. This is why interruptible entries start life as verified: false.
+    interruptible: []

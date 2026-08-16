@@ -27,10 +27,11 @@ POLL_SECONDS = 1.0
 LOG_RECHECK_SECONDS = 20.0
 
 
-def _report_json(report: PullReport) -> dict:
+def _report_json(report: PullReport, pull_id: int = -1) -> dict:
     p = report.pull
     v = report.verdict
     return {
+        "id": pull_id,
         "boss": p.boss,
         "difficulty": p.difficulty,
         "attempt": p.attempt,
@@ -109,8 +110,13 @@ class Monitor:
             status = self._status
             lines = self._lines_seen
             advanced = self._advanced
+            reports = self.session.reports
+            latest_id = len(reports) - 1
+            # The index is the pull's identity, so the dashboard can ask for an
+            # earlier attempt by id rather than by guessing from a label.
             history = [
                 {
+                    "id": i,
                     "boss": r.pull.boss,
                     "attempt": r.pull.attempt,
                     "duration": r.pull.fmt(r.pull.duration),
@@ -118,8 +124,8 @@ class Monitor:
                     "percent": r.pull.best_boss_percent(),
                     "deaths": len(r.pull.deaths),
                 }
-                for r in self.session.reports[-12:]
-            ]
+                for i, r in enumerate(reports)
+            ][-14:]
         return {
             "status": status,
             "log_path": str(self.log_path) if self.log_path else None,
@@ -130,8 +136,16 @@ class Monitor:
                 self.segmenter.current.boss if self.segmenter.current else None
             ),
             "history": list(reversed(history)),
-            "latest": _report_json(latest) if latest else None,
+            "latest": _report_json(latest, latest_id) if latest else None,
         }
+
+    def report_json(self, pull_id: int) -> Optional[dict]:
+        """An earlier attempt, by index, for revisiting it mid-raid."""
+        with self._lock:
+            reports = list(self.session.reports)
+        if 0 <= pull_id < len(reports):
+            return _report_json(reports[pull_id], pull_id)
+        return None
 
     # -- ingestion ------------------------------------------------------
     def _consume(self, line: str) -> None:
@@ -240,6 +254,13 @@ def create_app(monitor: Monitor) -> Flask:
     @app.route("/api/state")
     def state():
         return jsonify(monitor.state())
+
+    @app.route("/api/pull/<int:pull_id>")
+    def pull(pull_id: int):
+        data = monitor.report_json(pull_id)
+        if data is None:
+            return jsonify({"error": "no such pull"}), 404
+        return jsonify(data)
 
     return app
 
