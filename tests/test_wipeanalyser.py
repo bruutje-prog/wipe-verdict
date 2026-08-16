@@ -18,22 +18,22 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from wipeverdict.analysis import (
+from wipeanalyser.analysis import (
     alive_at,
     alive_time,
     avoidable_table,
     damage_windows,
     shared_bursts,
 )
-from wipeverdict.session import Session
-from wipeverdict.config import load_config
-from wipeverdict.deaths import (
+from wipeanalyser.session import Session
+from wipeanalyser.config import load_config
+from wipeanalyser.deaths import (
     SIG_LOOSE_BOSS,
     SIG_TANK_MITIGATION,
     analyse_deaths,
     verdict,
 )
-from wipeverdict.findings import (
+from wipeanalyser.findings import (
     Finding,
     MetricError,
     assert_metric_valid,
@@ -41,8 +41,8 @@ from wipeverdict.findings import (
     RANK_ROOT_CAUSE,
     RANK_THROUGHPUT,
 )
-from wipeverdict.logparse import parse_line, split_fields
-from wipeverdict.pulls import (
+from wipeanalyser.logparse import parse_line, split_fields
+from wipeanalyser.pulls import (
     AuraRecord,
     CastRecord,
     DamageRecord,
@@ -51,8 +51,8 @@ from wipeverdict.pulls import (
     Pull,
     PullSegmenter,
 )
-from wipeverdict.roles import TANK, detect_roles
-from wipeverdict.tail import LogTailer
+from wipeanalyser.roles import TANK, detect_roles
+from wipeanalyser.tail import LogTailer
 
 SAMPLES = Path(__file__).resolve().parent.parent / "samples"
 
@@ -656,7 +656,7 @@ class TestAmountThreshold(unittest.TestCase):
         return p
 
     def test_threshold_keeps_only_the_bigger_component(self):
-        from wipeverdict.config import Mechanic
+        from wipeanalyser.config import Mechanic
 
         cfg = load_config()
         boss = cfg.boss(1606)
@@ -708,7 +708,7 @@ class TestDelta(unittest.TestCase):
         """Thok's breath depends on which captive he drinks, so two pulls can
         contain different mechanics. Comparing raw totals then reports a
         difference nobody caused."""
-        from wipeverdict.session import PullDelta
+        from wipeanalyser.session import PullDelta
 
         d = PullDelta(
             compared_to="pull 7", boss_pct=0.0, boss_pct_before=11.5,
@@ -724,7 +724,7 @@ class TestDelta(unittest.TestCase):
         self.assertNotIn("156 avoidable hits vs 0", text)
 
     def test_identical_mechanics_compare_directly(self):
-        from wipeverdict.session import PullDelta
+        from wipeanalyser.session import PullDelta
 
         d = PullDelta(
             compared_to="pull 2", boss_pct=5.0, boss_pct_before=9.0,
@@ -789,7 +789,7 @@ class TestTailer(unittest.TestCase):
         WoWCombatLog-081626_195253.txt. Looking for the bare filename found
         nothing on a night that was actively logging.
         """
-        from wipeverdict.tail import find_log
+        from wipeanalyser.tail import find_log
 
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
@@ -808,7 +808,7 @@ class TestTailer(unittest.TestCase):
 
     def test_archive_subdirectory_is_not_picked_up(self):
         """Uploaded logs are moved into warcraftlogsarchive/ and are dead."""
-        from wipeverdict.tail import find_log
+        from wipeanalyser.tail import find_log
 
         with tempfile.TemporaryDirectory() as tmp:
             d = Path(tmp)
@@ -835,7 +835,7 @@ class TestAgainstRealLog(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from wipeverdict.pulls import read_pulls
+        from wipeanalyser.pulls import read_pulls
 
         cls.pulls = read_pulls(str(SAMPLES / "darkshaman_0730_h25.txt"))
 

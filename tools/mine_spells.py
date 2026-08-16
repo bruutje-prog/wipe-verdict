@@ -20,9 +20,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from wipeverdict.logparse import is_player  # noqa: E402
-from wipeverdict.roles import detect_roles  # noqa: E402
-from wipeverdict.pulls import read_pulls  # noqa: E402
+from wipeanalyser.logparse import is_player  # noqa: E402
+from wipeanalyser.roles import detect_roles  # noqa: E402
+from wipeanalyser.pulls import read_pulls  # noqa: E402
 
 
 def main() -> int:

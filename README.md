@@ -25,7 +25,7 @@ pip install -r requirements.txt
 monitor:
 
 ```bash
-python -m wipeverdict live
+python -m wipeanalyser live
 ```
 
 It finds `WoWCombatLog.txt` on its own, reads what has already been logged
@@ -38,9 +38,9 @@ Point it somewhere specific with `--log "C:\...\Logs\WoWCombatLog.txt"`.
 **After the fact**, against any saved log:
 
 ```bash
-python -m wipeverdict pulls  <logfile>                  # what was attempted
-python -m wipeverdict report <logfile> --encounter 1606 # full verdicts
-python -m wipeverdict report <logfile> --last           # just the last pull
+python -m wipeanalyser pulls  <logfile>                  # what was attempted
+python -m wipeanalyser report <logfile> --encounter 1606 # full verdicts
+python -m wipeanalyser report <logfile> --last           # just the last pull
 ```
 
 `--encounter` matters on a full night: these logs are 400-500 MB and filtering

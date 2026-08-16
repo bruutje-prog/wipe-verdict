@@ -1,8 +1,8 @@
 """Command line entry point.
 
-    python -m wipeverdict report <logfile> [--encounter 1606] [--pull 2]
-    python -m wipeverdict pulls  <logfile>
-    python -m wipeverdict live   [--log <path>] [--port 8765]
+    python -m wipeanalyser report <logfile> [--encounter 1606] [--pull 2]
+    python -m wipeanalyser pulls  <logfile>
+    python -m wipeanalyser live   [--log <path>] [--port 8765]
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def cmd_live(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    ap = argparse.ArgumentParser(prog="wipeverdict")
+    ap = argparse.ArgumentParser(prog="wipeanalyser")
     ap.add_argument(
         "--config", default=None, help="config directory (default: ./config)"
     )

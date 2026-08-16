@@ -2,7 +2,7 @@
 
 Established by reading this guild's own logs with `tools/probe_layout.py`, not
 from documentation. Re-run that tool after a patch; if a column moves, this
-file and the constants in `wipeverdict/logparse.py` are what need updating.
+file and the constants in `wipeanalyser/logparse.py` are what need updating.
 
 ```
 8/11/2026 19:56:46.6141  COMBAT_LOG_VERSION,9,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,5.5.4,PROJECT_ID,19
