@@ -371,6 +371,42 @@ class TestAvoidableCounting(unittest.TestCase):
         self.assertEqual(mist.damage, 100_000, "damage still totals every tick")
 
 
+    def test_a_role_that_cannot_avoid_a_mechanic_is_not_counted(self):
+        """Freezing Breath is a frontal. The tank holding the boss eats it by
+        definition, so counting it against them blames them for tanking."""
+        cfg = load_config()
+        boss = cfg.boss(1599)
+        self.assertIsNotNone(boss, "Thok must be configured")
+        self.assertIn("tank", boss.avoidable[143773].exempt_roles)
+
+        p = _pull(300.0)
+        p.players = {"Tank": "Tank", "Mage": "Mage"}
+        # Make the tank unambiguous: sustained boss melee plus a tank ability.
+        for i in range(40):
+            p.damage_taken.append(_melee(float(i * 5), "Tank", 100_000, hp=0.7))
+        p.casts.append(CastRecord(
+            t=1.0, src_guid="Tank", src_name="Tank", dest_guid="Tank",
+            spell_id=1, spell_name="Shield Slam", started=False,
+        ))
+        for who in ("Tank", "Mage"):
+            for i in range(5):
+                p.damage_taken.append(
+                    DamageRecord(
+                        t=float(100 + i), dest_guid=who, dest_name=who,
+                        src_guid="Creature-1", src_name="Thok", spell_id=143773,
+                        spell_name="Freezing Breath", amount=300_000,
+                        absorbed=0, overkill=-1, periodic=False, hp_after=0.5,
+                    )
+                )
+
+        roles = detect_roles(p)
+        self.assertEqual(roles["Tank"].role, TANK)
+        rows = avoidable_table(p, boss, roles)
+        hit = {r.player for r in rows if r.spell_id == 143773}
+        self.assertIn("Mage", hit)
+        self.assertNotIn("Tank", hit, "the tank cannot avoid a frontal breath")
+
+
 class TestConfig(unittest.TestCase):
     def test_both_progression_bosses_are_configured(self):
         cfg = load_config()
@@ -515,11 +551,30 @@ class TestAgainstRealLog(unittest.TestCase):
 
     def test_raid_composition_is_plausible(self):
         roles = detect_roles(self.pulls[1])
-        tanks = sum(1 for r in roles.values() if r.role == "tank")
+        tanks = sorted(r.name for r in roles.values() if r.role == "tank")
         healers = sum(1 for r in roles.values() if r.role == "healer")
-        self.assertEqual(tanks, 2)
+        # Dark Shaman is a two-boss encounter, so three tanks is normal. An
+        # earlier version of this test demanded exactly two and was encoding a
+        # threshold bug that dropped a protection paladin to "dps".
+        self.assertIn(len(tanks), (2, 3), f"implausible tank count: {tanks}")
+        self.assertIn("Alaraya", tanks)
+        self.assertIn("Cytrina", tanks)
         self.assertGreaterEqual(healers, 4, "disc priests heal mostly via absorbs")
         self.assertLessEqual(healers, 7)
+
+    def test_a_players_role_does_not_flip_between_pulls(self):
+        """Role decides who is exempt from blame, so it cannot depend on how
+        much of the boss's attention someone happened to get in one pull."""
+        from collections import defaultdict
+
+        seen = defaultdict(set)
+        for p in self.pulls:
+            if p.duration < 60:
+                continue
+            for r in detect_roles(p).values():
+                seen[r.name].add(r.role)
+        flipped = {n: sorted(v) for n, v in seen.items() if len(v) > 1}
+        self.assertEqual(flipped, {}, f"role changed between pulls: {flipped}")
 
     def test_cascade_deaths_are_excluded_from_blame(self):
         v = verdict(self.pulls[1])

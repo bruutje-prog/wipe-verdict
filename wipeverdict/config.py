@@ -27,10 +27,16 @@ class Mechanic:
     name: str
     count: str = COUNT_HITS
     note: str = ""
+    #: roles that cannot avoid this and must not be counted as having failed.
+    #: A frontal breath is unavoidable for whoever is holding the boss.
+    exempt_roles: tuple[str, ...] = ()
 
     @property
     def by_applications(self) -> bool:
         return self.count == COUNT_APPLICATIONS
+
+    def exempt(self, role: str) -> bool:
+        return role in self.exempt_roles
 
 
 @dataclass(slots=True)
@@ -139,6 +145,7 @@ def load_config(config_dir: Optional[Path | str] = None) -> Config:
                     name=row.get("name", "?"),
                     count=row.get("count", COUNT_HITS),
                     note=row.get("note", ""),
+                    exempt_roles=tuple(row.get("exempt_roles") or ()),
                 )
                 if m.count not in (COUNT_HITS, COUNT_APPLICATIONS):
                     raise ValueError(

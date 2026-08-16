@@ -150,7 +150,24 @@ def detect_roles(pull: "Pull") -> dict[str, PlayerRole]:
         hits = melee_hits.get(guid, 0)
         sustained = hits >= 10 and span >= 0.15 * max(pull.duration, 1.0)
 
-        if melee_share >= 0.25 and tank_hits:
+        if len(tank_hits) >= 2:
+            # Several tanking abilities means a tanking SPEC, and a tanking
+            # spec is not played as dps in a raid. This has to outrank melee
+            # share: an off-tank's share of the boss's attention swings with
+            # the swap order, and Nodory -- a protection paladin pressing
+            # Shield of the Righteous, Avenger's Shield and Sacred Shield in
+            # all nine pulls of a night -- flipped to "dps" on the one pull
+            # where that share landed at 24.6% instead of 25%. Role decides who
+            # is exempt from blame, so it must not hinge on half a percent.
+            role, confidence = TANK, 0.9
+            evidence.append(
+                f"casts {len(tank_hits)} tanking abilities: "
+                f"{', '.join(sorted(tank_hits)[:3])}"
+            )
+            evidence.append(
+                f"took {melee:,} boss melee ({melee_share:.0%} of the top tank)"
+            )
+        elif melee_share >= 0.25 and tank_hits:
             role, confidence = TANK, 0.95
             evidence.append(f"took {melee:,} boss melee ({melee_share:.0%} of top tank)")
             evidence.append(f"tank abilities: {', '.join(sorted(tank_hits)[:3])}")

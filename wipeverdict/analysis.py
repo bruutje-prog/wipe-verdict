@@ -121,6 +121,11 @@ def avoidable_table(
     for (guid, spell_id), count in hits.items():
         mech = boss.avoidable[spell_id]
         role = roles[guid].role if guid in roles else "dps"
+        # Some mechanics cannot be avoided by the role that has to stand there.
+        # Counting a frontal breath against the tank holding the boss blames
+        # someone for doing their job.
+        if mech.exempt(role):
+            continue
         rows.append(
             AvoidableRow(
                 player=pull.players.get(guid, guid),

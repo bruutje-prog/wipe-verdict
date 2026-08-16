@@ -65,7 +65,14 @@ bosses:
     seeded_from: "25 Heroic, 2026-08-02 (9 pulls)"
 
     avoidable:
-      - {spell_id: 143773, name: "Freezing Breath", count: hits}
+      # Frontal breath. Unavoidable for whoever is holding the boss -- across
+      # the 02/08 pulls the two tanks took 121 of 223 hits (54%) simply by
+      # being in front of it, while the other 102 were spread over 17 raiders.
+      # Counting it against the tanks blames them for tanking.
+      - {spell_id: 143773, name: "Freezing Breath", count: hits,
+         exempt_roles: [tank]}
+      # Hits behind the boss, so the tanks are the ones who CAN'T be caught by
+      # it: they took 2 of 26. No exemption.
       - {spell_id: 143428, name: "Tail Lash",       count: hits}
       - {spell_id: 143800, name: "Icy Blood",       count: applications}
     # Deliberately NOT listed as avoidable, though they are the biggest damage
