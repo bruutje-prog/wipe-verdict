@@ -39,12 +39,20 @@ bosses:
     boss_units: ["Earthbreaker Haromm", "Wavebinder Kardris"]
 
     avoidable:
+      # Tank share of hits is the test for whether a mechanic follows whoever
+      # is holding the boss. With 3 tanks in 24 raiders, ~12% is what an
+      # untargeted mechanic looks like. Toxic Storm 18%, Falling Ash 14%,
+      # Toxic Tornado 12%, Foul Stream 17% -- all untargeted, no exemption.
       - {spell_id: 144017, name: "Toxic Storm",   count: hits}
       - {spell_id: 144030, name: "Toxic Tornado", count: hits}
       - {spell_id: 143987, name: "Falling Ash",   count: hits}
       - {spell_id: 144334, name: "Iron Tomb",     count: hits}
       - {spell_id: 144331, name: "Iron Prison",   count: hits}
-      - {spell_id: 143993, name: "Foul Geyser",   count: hits}
+      # 54% of its hits land on tanks, four times what an untargeted mechanic
+      # would give them. It follows the threat target, so the tanks are not
+      # dodging it by choice.
+      - {spell_id: 143993, name: "Foul Geyser",   count: hits,
+         exempt_roles: [tank]}
       # Ticking pools. 708 ticks across 21 players in one pull -- counted by
       # application, or this single mechanic outweighs everything else.
       - {spell_id: 144089, name: "Toxic Mist", count: applications}
@@ -91,6 +99,154 @@ bosses:
     # pull and Fixate 77 times, but nothing in the log shows the raid
     # interrupting either, and a cast bar alone is not evidence that a cast can
     # be stopped. Add entries here if that is wrong.
+    interruptible: []
+
+  # -------------------------------------------------------------------------
+  # Everything below was seeded the same way: mine the guild's own logs, then
+  # apply the tank-share test. A mechanic whose hits land on tanks far more
+  # often than the tanks' share of the raid follows the threat target, so the
+  # tanks are not choosing to stand in it. Near-100% ones become tank busters
+  # outright; broader ones stay avoidable with the tanks exempted.
+  # Mechanics that hit essentially the whole raid every pull are OMITTED, with
+  # a note recording which and why so nobody re-adds them next month.
+  # -------------------------------------------------------------------------
+
+  general_nazgrim:
+    encounter_id: 1603
+    display_name: "General Nazgrim"
+    boss_units: ["General Nazgrim"]
+    seeded_from: "25 Heroic, 2026-07-30 + 2026-07-09 (4 pulls)"
+
+    avoidable:
+      - {spell_id: 143716, name: "Heroic Shockwave", count: hits}
+      - {spell_id: 143887, name: "Multi-Shot",       count: hits}
+      - {spell_id: 143884, name: "Shoot",            count: hits}
+      - {spell_id: 143873, name: "Ravager",          count: hits}
+      - {spell_id: 143712, name: "Aftershock",       count: hits}
+      # 36% of hits on tanks against ~10% expected: the Ironblade's whirlwind
+      # follows whoever is holding it.
+      - {spell_id: 143421, name: "Ironstorm", count: hits, exempt_roles: [tank]}
+    # OMITTED as unavoidable raid damage: Bonecracker (143638 - 2921 hits
+    # across 27 players, 0% on tanks) and War Song (143503 - every raider in
+    # the sample). Either one would bury everything actionable.
+
+    tank_busters:
+      - {spell_id: 143494, name: "Sundering Blow", expect_cooldown: true}
+      - {spell_id: 143502, name: "Execute",        expect_cooldown: true}
+
+    interruptible:
+      # Arcweavers cast this 37 times across the sample and the raid never
+      # interrupted one. Unverified: a cast bar is not proof it can be stopped.
+      - {spell_id: 143432, name: "Arcane Shock", verified: false}
+
+  malkorok:
+    encounter_id: 1595
+    display_name: "Malkorok"
+    boss_units: ["Malkorok"]
+    seeded_from: "25 Heroic, 2026-07-05 (13 pulls)"
+
+    avoidable:
+      - {spell_id: 142987, name: "Imploding Energy",   count: hits}
+      - {spell_id: 142986, name: "Imploding Energy",   count: hits}
+      - {spell_id: 142816, name: "Breath of Y'Shaarj", count: hits}
+      - {spell_id: 142815, name: "Arcing Smash",       count: hits}
+      - {spell_id: 142849, name: "Seismic Slam",       count: hits}
+      # Dispelled 5 times in the sample, so the missed-dispel check picks this
+      # up by itself -- the dispellable set is derived from behaviour, not listed.
+      - {spell_id: 142913, name: "Displaced Energy",   count: hits}
+    # OMITTED as unavoidable: Blood Rage (142890 - 1438 hits on all 26 raiders,
+    # and the fight's defining mechanic rather than anybody's mistake), Essence
+    # of Y'Shaarj (143857) and Ancient Miasma (142906).
+
+    tank_busters: []
+    interruptible: []
+
+  spoils_of_pandaria:
+    encounter_id: 1594
+    display_name: "Spoils of Pandaria"
+    # No single health bar, so the "closest we got" percentage means nothing
+    # here. Everything else works; ignore that one number on this encounter.
+    boss_units: []
+    seeded_from: "25 Heroic, 2026-08-02 (11 pulls)"
+
+    avoidable:
+      - {spell_id: 148583, name: "Jade Tempest",     count: hits}
+      - {spell_id: 148514, name: "Fracture",         count: hits}
+      - {spell_id: 148517, name: "Molten Fist",      count: hits}
+      - {spell_id: 148516, name: "Shadow Volley",    count: hits}
+      - {spell_id: 146217, name: "Keg Toss",         count: hits}
+      - {spell_id: 145716, name: "Gusting Bomb",     count: hits}
+      - {spell_id: 145718, name: "Gusting Bomb",     count: hits}
+      - {spell_id: 145817, name: "Windstorm",        count: hits}
+      - {spell_id: 145514, name: "Return to Stone",  count: hits}
+      - {spell_id: 145993, name: "Set to Blow",      count: hits}
+      - {spell_id: 146257, name: "Path of Blossoms", count: hits}
+      - {spell_id: 142775, name: "Nova",             count: hits}
+      - {spell_id: 146815, name: "Supernova",        count: hits}
+      - {spell_id: 145240, name: "Forbidden Magic",  count: hits, exempt_roles: [tank]}
+      - {spell_id: 145706, name: "Throw Explosives", count: hits, exempt_roles: [tank]}
+    # OMITTED as unavoidable: Pheromone Cloud (148760 - 11,754 hits across
+    # eleven pulls), Encapsulated Pheromones (145748) and Torment (136885).
+
+    tank_busters: []
+    interruptible: []
+
+  paragons_of_the_klaxxi:
+    encounter_id: 1593
+    display_name: "Paragons of the Klaxxi"
+    boss_units: []
+    # THIN DATA: the guild has no heroic Paragons logged. Spell ids do not
+    # change with difficulty so these are valid, but none of it has been seen
+    # at heroic damage levels.
+    seeded_from: "25 Normal, 2026-08-09 (1 pull)"
+
+    avoidable:
+      - {spell_id: 143735, name: "Caustic Amber",    count: hits}
+      - {spell_id: 144839, name: "Multi-Shot",       count: hits}
+      - {spell_id: 143666, name: "Diminish",         count: hits}
+      - {spell_id: 143702, name: "Whirling",         count: hits}
+      - {spell_id: 143701, name: "Whirling",         count: hits}
+      - {spell_id: 142950, name: "Fire",             count: hits}
+      - {spell_id: 143768, name: "Sonic Projection", count: hits}
+      - {spell_id: 143362, name: "Feed",             count: hits}
+
+    tank_busters:
+      - {spell_id: 142930, name: "Razor Sharp Blades",  expect_cooldown: true}
+      - {spell_id: 142922, name: "Razor Sharp Blades",  expect_cooldown: true}
+      - {spell_id: 143979, name: "Vicious Assault",     expect_cooldown: true}
+      - {spell_id: 142929, name: "Tenderizing Strikes", expect_cooldown: true}
+      - {spell_id: 143941, name: "Mutilate",            expect_cooldown: true}
+      - {spell_id: 143278, name: "Genetic Alteration",  expect_cooldown: false}
+      - {spell_id: 143339, name: "Injection",           expect_cooldown: false}
+
+    interruptible: []
+
+  garrosh_hellscream:
+    encounter_id: 1623
+    display_name: "Garrosh Hellscream"
+    boss_units: ["Garrosh Hellscream"]
+    # THIN DATA: no heroic Garrosh logged, and the sample mixes 25 and 10
+    # Normal, so the damage behind these is not heroic damage.
+    seeded_from: "25 Normal 2026-08-09 + 10 Normal 2026-06-30 (5 pulls)"
+
+    avoidable:
+      - {spell_id: 144758, name: "Desecrate",           count: hits}
+      - {spell_id: 144762, name: "Desecrated",          count: hits}
+      - {spell_id: 144817, name: "Desecrated",          count: hits}
+      - {spell_id: 144650, name: "Iron Star Impact",    count: hits}
+      - {spell_id: 144798, name: "Exploding Iron Star", count: hits}
+      - {spell_id: 145199, name: "Explosive Despair",   count: hits}
+      - {spell_id: 145033, name: "Empowered Whirling Corruption", count: hits}
+    # OMITTED as unavoidable: Annihilate (144969) and Whirling Corruption
+    # (144989 - 1112 hits on all 28 raiders).
+
+    tank_busters:
+      # 100% of hits land on tanks: this is the tank debuff, not a positioning
+      # failure, so it belongs here rather than in the avoidable table.
+      - {spell_id: 145183, name: "Gripping Despair",           expect_cooldown: true}
+      - {spell_id: 145195, name: "Empowered Gripping Despair", expect_cooldown: true}
+      - {spell_id: 144582, name: "Hamstring",                  expect_cooldown: false}
+
     interruptible: []
 
   siegecrafter_blackfuse:

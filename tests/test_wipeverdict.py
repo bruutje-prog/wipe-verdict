@@ -107,6 +107,26 @@ class TestParser(unittest.TestCase):
         self.assertFalse(boss.src_hostile)   # a player cast it
         self.assertTrue(boss.dest_hostile)   # at a boss add
 
+    def test_damage_still_parses_without_advanced_logging(self):
+        """Advanced Combat Logging can be off -- it was, on 13/08.
+
+        WoW keeps the same field count and zero-fills the advanced block. The
+        damage amount survives only because the payload is indexed from the END
+        of the line; health correctly becomes unknown rather than zero.
+        """
+        line = (
+            '8/13/2026 21:04:30.7232  SPELL_DAMAGE,Player-4454-055AFC7B,'
+            '"Andwhatnow-MirageRaceway-EU",0x514,0x80000000,'
+            'Vehicle-0-4445-1136-4063-71543-00007E0D5C,"Immerseus",0x10a48,'
+            '0x80000000,30451,"Arcane Blast",0x40,'
+            '0000000000000000,0000000000000000,0,0,0,0,0,0,0,-1,0,0,0,'
+            '0.00,0.00,557,0.0000,0,101631,101631,-1,64,0,0,0,nil,nil,nil,ST'
+        )
+        ev = parse_line(line)
+        self.assertEqual(ev.spell_name, "Arcane Blast")
+        self.assertEqual(ev.amount, 101631)
+        self.assertIsNone(ev.hp_fraction, "no health data without advanced logging")
+
     def test_malformed_line_returns_none(self):
         self.assertIsNone(parse_line("not a log line"))
         self.assertIsNone(parse_line(""))
@@ -280,6 +300,22 @@ class TestCascade(unittest.TestCase):
             any("inferred" in e for e in mage.evidence),
             "the inference must be stated, not hidden",
         )
+
+    def test_root_cause_skips_a_death_with_no_identifiable_killer(self):
+        """A Spoils pull opened with a death 2s in that no damage explained.
+        Naming it as the root cause produces "root cause: unknown"."""
+        p = self._tank_then_melee_deaths()
+        # Death with nothing to attribute it to.
+        p.deaths.append(DeathRecord(t=2.0, guid="Ghost", name="Ghost"))
+        p.players["Ghost"] = "Ghost"
+        # A later death that CAN be explained.
+        p.damage_taken.append(_mechanic(50.0, "Mage"))
+        p.deaths.append(DeathRecord(t=50.5, guid="Mage", name="Mage"))
+
+        v = verdict(p)
+        self.assertIsNotNone(v.root)
+        self.assertEqual(v.root.name, "Mage")
+        self.assertIn("Toxic Storm", v.headline(p.fmt))
 
     def test_kill_headline_does_not_claim_a_root_cause(self):
         p = self._tank_then_melee_deaths()

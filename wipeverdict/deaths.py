@@ -382,12 +382,18 @@ class WipeVerdict:
 
 def verdict(pull: "Pull", roles: Optional[dict[str, PlayerRole]] = None) -> WipeVerdict:
     deaths = analyse_deaths(pull, roles)
-    root = None
-    # The first death is usually the story -- but not if it was a reprieve.
-    for d in deaths:
-        if d.signature != SIG_REPRIEVE:
-            root = d
-            break
+    # The first death is usually the story -- but not if it was a reprieve, and
+    # not if nothing can be said about what killed them. A death with no
+    # identifiable killing blow (someone who zoned in dead, or died to damage
+    # outside the pull window) makes a headline that reads "root cause:
+    # unknown", which is worse than naming the first death anyone can act on.
+    root = next(
+        (d for d in deaths
+         if d.signature != SIG_REPRIEVE and d.killing_blow is not None),
+        None,
+    )
+    if root is None:
+        root = next((d for d in deaths if d.signature != SIG_REPRIEVE), None)
     wipe_at = max((d.t for d in deaths), default=pull.duration)
     return WipeVerdict(
         wiped=pull.is_wipe,

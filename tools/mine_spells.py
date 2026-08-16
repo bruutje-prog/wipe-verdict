@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from wipeverdict.logparse import is_player  # noqa: E402
+from wipeverdict.roles import detect_roles  # noqa: E402
 from wipeverdict.pulls import read_pulls  # noqa: E402
 
 
@@ -36,11 +37,21 @@ def main() -> int:
     print(f"# mined from {len(pulls)} pulls of {pulls[0].boss} "
           f"({pulls[0].difficulty}), encounter_id {pulls[0].encounter_id}\n")
 
-    # spell_id -> (name, victims, hits, total damage, max single hit)
+    # spell_id -> stats, including WHO takes it. Role share is what tells a
+    # frontal breath (unavoidable for the tank holding the boss) apart from a
+    # ground effect anyone can step out of.
     stats: dict[int, dict] = defaultdict(
-        lambda: {"name": "", "victims": set(), "hits": 0, "dmg": 0, "max": 0}
+        lambda: {
+            "name": "", "victims": set(), "hits": 0, "dmg": 0, "max": 0,
+            "tank_hits": 0, "tank_victims": set(),
+        }
     )
+    raid = set()
+    n_tanks = 0
     for p in pulls:
+        roles = detect_roles(p)
+        raid.update(p.players)
+        n_tanks = max(n_tanks, sum(1 for r in roles.values() if r.role == "tank"))
         for d in p.damage_taken:
             if is_player(d.src_guid):
                 continue  # ignore player-on-player (reflects, etc.)
@@ -50,26 +61,40 @@ def main() -> int:
             s["hits"] += 1
             s["dmg"] += d.amount + d.absorbed
             s["max"] = max(s["max"], d.amount + d.absorbed)
+            if d.dest_guid in roles and roles[d.dest_guid].role == "tank":
+                s["tank_hits"] += 1
+                s["tank_victims"].add(d.dest_guid)
 
+    raid_size = max(len(raid), 1)
     rows = sorted(stats.items(), key=lambda kv: -kv[1]["dmg"])
 
-    print("## enemy damage sources, by total damage to the raid")
-    print(f"{'spell_id':>9}  {'name':<32} {'victims':>7} {'hits':>7} "
-          f"{'total':>13} {'max hit':>10}  guess")
+    print(f"## enemy damage sources ({raid_size} raiders, {n_tanks} tanks)")
+    print(f"{'spell_id':>9}  {'name':<30} {'victims':>7} {'hits':>7} "
+          f"{'total':>13} {'max hit':>10} {'tank%':>6}  suggestion")
     for spell_id, s in rows[:34]:
         victims = len(s["victims"])
-        avg_hits_per_victim = s["hits"] / max(1, victims)
+        share = victims / raid_size
+        per_victim = s["hits"] / max(1, victims)
+        tank_share = s["tank_hits"] / max(1, s["hits"])
+        # A tank is roughly n_tanks/raid_size of the raid. Taking a lot more
+        # than that share of a mechanic means it follows whoever is tanking.
+        expected_tank = (n_tanks / raid_size) if n_tanks else 0.08
+
         if spell_id == 0:
             guess = "melee"
         elif victims <= 3 and s["max"] > 150_000:
-            guess = "TANK BUSTER"
-        elif victims >= 6:
-            guess = "avoidable?" if avg_hits_per_victim < 12 else "raid-wide dot"
+            guess = "TANK BUSTER -> tank_busters"
+        elif share >= 0.8 and per_victim >= 12:
+            guess = "unavoidable raid damage -> OMIT"
+        elif tank_share >= max(0.35, expected_tank * 3):
+            guess = "avoidable BUT exempt_roles:[tank]"
+        elif share >= 0.25:
+            guess = "avoidable"
         else:
             guess = ""
         print(
-            f"{spell_id:>9}  {s['name'][:32]:<32} {victims:>7} {s['hits']:>7} "
-            f"{s['dmg']:>13,} {s['max']:>10,}  {guess}"
+            f"{spell_id:>9}  {s['name'][:30]:<30} {victims:>7} {s['hits']:>7} "
+            f"{s['dmg']:>13,} {s['max']:>10,} {tank_share*100:5.0f}%  {guess}"
         )
 
     print("\n## hostile casts with a cast time (interruptible candidates)")

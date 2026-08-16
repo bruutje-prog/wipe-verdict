@@ -95,6 +95,8 @@ class Monitor:
         self._latest: Optional[PullReport] = None
         self._status = "starting"
         self._lines_seen = 0
+        #: None until a COMBAT_LOG_VERSION header has been seen
+        self._advanced: Optional[bool] = None
         self._thread: Optional[threading.Thread] = None
 
     # -- state ----------------------------------------------------------
@@ -103,6 +105,7 @@ class Monitor:
             latest = self._latest
             status = self._status
             lines = self._lines_seen
+            advanced = self._advanced
             history = [
                 {
                     "boss": r.pull.boss,
@@ -118,6 +121,7 @@ class Monitor:
             "status": status,
             "log_path": str(self.log_path) if self.log_path else None,
             "lines_seen": lines,
+            "advanced_logging": advanced,
             "in_pull": self.segmenter.current is not None,
             "current_boss": (
                 self.segmenter.current.boss if self.segmenter.current else None
@@ -130,6 +134,18 @@ class Monitor:
     def _consume(self, line: str) -> None:
         ev = parse_line(line)
         if ev is None:
+            return
+        # Advanced Combat Logging is a game setting that can be off. Without it
+        # there are no health values, so boss percentage and "died from full
+        # health" are impossible. That is worth saying loudly on the dashboard
+        # rather than silently reporting a blank column all night.
+        if ev.event == "COMBAT_LOG_VERSION":
+            f = ev.fields
+            if "ADVANCED_LOG_ENABLED" in f:
+                idx = f.index("ADVANCED_LOG_ENABLED")
+                if idx + 1 < len(f):
+                    with self._lock:
+                        self._advanced = f[idx + 1] == "1"
             return
         finished = self.segmenter.feed(ev)
         if finished is None:

@@ -46,8 +46,22 @@ python -m wipeverdict report <logfile> --last           # just the last pull
 `--encounter` matters on a full night: these logs are 400-500 MB and filtering
 to one boss avoids parsing the rest.
 
-Requires **Advanced Combat Logging** (Options → Network). It is already on in
-this guild's logs.
+## Turn on Advanced Combat Logging
+
+**Esc → Options → Network → Advanced Combat Logging**, then `/reload`.
+
+It was ON for 30/07, 09/08 and 11/08 and **OFF on 13/08**, so it can come
+unset. Without it the log carries no health values, which costs:
+
+- boss health percentage — the "we got them to 1.1%" number, and with it the
+  whole pull-over-pull progression comparison
+- health before a killing blow, so the "single melee hit from full health with
+  no healing" signature cannot fire
+
+Everything else still works: deaths, inferred killing blows, tank-death cascade
+detection, avoidable damage, interrupts, cooldown coverage and roles. The
+dashboard shows a warning banner when it detects logging is off, so you find
+out at 20:00 rather than after the third wipe.
 
 ---
 
@@ -160,17 +174,20 @@ Verified against this guild's own logs:
 - **Live path** — 204,228 lines replayed into a file in bursts with deliberate
   mid-line splits; all pulls segmented and analysed with no corruption.
 
-**Not yet checked against Warcraft Logs report `3vQrn9Xt4jhDJ8aH` (13/08).**
-That night's log is no longer on this machine — the uploader archives and
-clears them, and the archive folder jumps from 11/08 to nothing. If you still
-have it, or re-download it, this is the check the brief asks for:
+**Checked against Warcraft Logs report `3vQrn9Xt4jhDJ8aH` (13/08) — matches.**
 
-```bash
-python -m wipeverdict pulls <13-08-log> --encounter 1606
-```
+| | report | parser |
+|---|---|---|
+| pulls | 17 | 17 |
+| kills | 6 | 6 |
+| Dark Shaman wipes | 6 | 6 |
 
-Expected from that report: 17 pulls, 6 heroic kills, 6 wipes on Dark Shaman,
-best 1.1%. If the pull list disagrees, the parser is wrong.
+The raw log contains 19 `ENCOUNTER_START`/`END` pairs; the two extra are a 0:14
+Iron Juggernaut and a 0:03 Dark Shaman, both resets. Warcraft Logs drops those
+too, and `report` skips anything under `--min-duration` (default 30s).
+
+The report's "best 1.1%" could not be checked: **Advanced Combat Logging was
+off that night**, so the log carries no health values at all. See below.
 
 ---
 

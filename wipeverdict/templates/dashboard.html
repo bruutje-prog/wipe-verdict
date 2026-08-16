@@ -88,6 +88,12 @@
   }
   .hist .pct { margin-left: auto; font-variant-numeric: tabular-nums; }
   .empty { color: var(--dim); padding: 30px 0; text-align: center; }
+  .warn {
+    margin: 14px 22px -4px; padding: 11px 15px; border-radius: 8px;
+    background: #3a2a12; border: 1px solid #7a5a1e; color: #ffd489;
+    font-size: 14px; line-height: 1.5;
+  }
+  .warn b { color: #ffe9bd; }
 </style>
 </head>
 <body>
@@ -96,6 +102,13 @@
   <span class="muted" id="boss-now"></span>
   <span class="status"><span class="live-dot" id="dot"></span><span id="status">connecting…</span></span>
 </header>
+
+<div id="advwarn" class="warn" style="display:none">
+  <b>Advanced Combat Logging is OFF.</b>
+  Boss health percentage and "died from full health" cannot be computed without it —
+  the wipe verdict still works, but it loses the progression number.
+  Fix: <b>Esc → Options → Network → Advanced Combat Logging</b>, then <b>/reload</b>.
+</div>
 
 <div class="wrap">
   <main>
@@ -225,6 +238,7 @@ async function tick() {
     $("status").textContent = s.in_pull ? "in combat" : s.status;
     $("dot").style.background = s.in_pull ? "var(--accent)" : "var(--good)";
     $("boss-now").textContent = s.current_boss ? "· pulling " + s.current_boss : "";
+    show("advwarn", s.advanced_logging === false);
     $("logpath").textContent = s.log_path || "no log found";
     $("lines").textContent = fmt(s.lines_seen) + " lines read";
     $("history").innerHTML = (s.history || []).length
