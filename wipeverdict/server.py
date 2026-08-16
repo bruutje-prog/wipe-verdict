@@ -15,6 +15,7 @@ from typing import Optional
 
 from flask import Flask, jsonify, render_template
 
+from .analysis import position_snapshot
 from .config import load_config
 from .logparse import parse_line
 from .pulls import PullSegmenter
@@ -27,10 +28,42 @@ POLL_SECONDS = 1.0
 LOG_RECHECK_SECONDS = 20.0
 
 
+def _position_map(report: PullReport) -> Optional[dict]:
+    """Where everyone stood when the pull's root-cause death happened.
+
+    A death is far easier to argue about with a picture: standing in the wrong
+    place is visible, and so is standing in the right one.
+    """
+    root = report.verdict.root
+    if root is None:
+        return None
+    markers = position_snapshot(
+        report.pull, root.t, report.roles, victim_guid=root.guid
+    )
+    if len(markers) < 3:
+        return None  # not enough to be worth drawing
+    return {
+        "at": report.pull.fmt(root.t),
+        "victim": root.name,
+        "killer": root.killer,
+        "markers": [
+            {
+                "name": m.name,
+                "kind": m.kind,
+                "x": round(m.x, 1),
+                "y": round(m.y, 1),
+                "stale": round(m.stale, 1),
+            }
+            for m in markers
+        ],
+    }
+
+
 def _report_json(report: PullReport, pull_id: int = -1) -> dict:
     p = report.pull
     v = report.verdict
     return {
+        "position_map": _position_map(report),
         "id": pull_id,
         "boss": p.boss,
         "difficulty": p.difficulty,
@@ -125,7 +158,10 @@ class Monitor:
                     "deaths": len(r.pull.deaths),
                 }
                 for i, r in enumerate(reports)
-            ][-14:]
+            ]
+            # Every pull is sent, not a tail slice: the sidebar scrolls, and a
+            # raid leader wants the first attempt of the night as much as the
+            # last one.
         return {
             "status": status,
             "log_path": str(self.log_path) if self.log_path else None,

@@ -83,6 +83,10 @@ HEAL_EVENTS = frozenset({"SPELL_HEAL", "SPELL_PERIODIC_HEAL"})
 #: Events carrying an advanced-info block. SWING_DAMAGE_LANDED is a duplicate of
 #: SWING_DAMAGE used for melee-swing bookkeeping; counting both double-counts
 #: damage, so callers should ignore _LANDED.
+#: Events whose payload length this module models, so indexing the advanced
+#: block from the end is safe. SPELL_CAST_SUCCESS has no payload at all.
+POSITION_EVENTS = DAMAGE_EVENTS | HEAL_EVENTS | {"SPELL_CAST_SUCCESS"}
+
 ADVANCED_EVENTS = DAMAGE_EVENTS | HEAL_EVENTS | {
     "SPELL_CAST_SUCCESS",
     "SPELL_ENERGIZE",
@@ -242,6 +246,33 @@ class Event:
         """GUID the advanced block describes -- may be the source OR the dest."""
         body = self._body()
         return body[0] if body else ""
+
+    @property
+    def position(self) -> Optional[tuple[float, float]]:
+        """World (x, y) of `info_guid`, or None.
+
+        Present only with Advanced Combat Logging. With it off the columns are
+        zero-filled, and 0,0 is not a real arena coordinate, so it is rejected.
+
+        Restricted to events whose trailing payload length is known. Position
+        sits at the END of the advanced block, so on an event with an unmodelled
+        payload -- SPELL_ENERGIZE, for one -- the same offsets read whatever
+        happens to be there and produce coordinates like (562.0, 0.0) sitting
+        next to a real arena at (1226, -5052).
+        """
+        if self.event not in POSITION_EVENTS:
+            return None
+        body = self._body()
+        if len(body) < 6:
+            return None
+        try:
+            x = float(body[-5])
+            y = float(body[-4])
+        except ValueError:
+            return None
+        if x == 0.0 and y == 0.0:
+            return None
+        return x, y
 
     @property
     def hp_values(self) -> Optional[tuple[float, float]]:

@@ -258,12 +258,24 @@ bosses:
     # the damage numbers behind them are not heroic numbers.
     seeded_from: "25 Normal, 2026-08-09"
 
+    # Classified by the raid leader on 16/08 after six heroic pulls.
     avoidable:
-      - {spell_id: 145444, name: "Overload",        count: hits}
+      # Fire left on the ground by the laser. Counted by application, because
+      # standing in it once is one mistake however long the tick list is.
+      - {spell_id: 143856, name: "Superheated",     count: applications}
+      # A crawler mine reaching its target.
       - {spell_id: 143002, name: "Detonate!",       count: hits}
+      # Blackfuse's sawblade. Established from tonight's log: 100% of the 96
+      # player hits landed within 25s of a Launch Sawblade cast, median lag
+      # 0.7s, and the bleed left on the Automated Shredder (143328) follows the
+      # same casts at median 7.2s as the blade travels on. Not proximity to the
+      # Shredder -- victims were a median 20m away from it. Dodge the blade.
       - {spell_id: 143327, name: "Serrated Slash",  count: hits}
       - {spell_id: 144210, name: "Death From Above", count: hits}
-      - {spell_id: 143856, name: "Superheated",     count: applications}
+    # OMITTED - Overload (145444) is NOT avoidable. It is scheduled raid damage
+    # that needs a raid cooldown, so it belongs to the damage-window analysis
+    # rather than the avoidable table. Listing it told 25 raiders to move out of
+    # something they cannot move out of, every single pull.
 
     tank_busters:
       - {spell_id: 143385, name: "Electrostatic Charge", expect_cooldown: true}

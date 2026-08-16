@@ -21,6 +21,9 @@ from .logparse import (
     iter_events,
 )
 
+#: Seconds between retained position samples per unit.
+POSITION_SAMPLE_S = 0.5
+
 DIFFICULTY_NAMES = {
     1: "Normal",
     2: "Heroic",
@@ -164,6 +167,13 @@ class Pull:
     damage_done: dict[str, int] = field(default_factory=dict)
     #: player GUID -> set of spell ids cast, used for spec detection
     cast_ids: dict[str, set[int]] = field(default_factory=dict)
+    #: unit GUID -> [(t, x, y)], downsampled. Enough to reconstruct where
+    #: everyone was standing at the moment of a death.
+    positions: dict[str, list[tuple[float, float, float]]] = field(
+        default_factory=dict
+    )
+    #: GUID -> display name for non-player units that have positions
+    unit_names: dict[str, str] = field(default_factory=dict)
 
     @property
     def difficulty(self) -> str:
@@ -348,6 +358,26 @@ class PullSegmenter:
             _register(pull, ev.dest_guid, ev.dest_name)
 
         t = pull.offset(ev.ts)
+
+        # Position history, downsampled hard. Every event carries coordinates,
+        # and keeping them all would cost more memory than the whole rest of
+        # the pull; one sample every POSITION_SAMPLE_S per unit is plenty to
+        # answer "where was everyone standing when this happened".
+        info = ev.info_guid
+        if info and info != "0000000000000000":
+            spot = ev.position
+            if spot is not None:
+                track = pull.positions.get(info)
+                if track is None:
+                    pull.positions[info] = [(t, spot[0], spot[1])]
+                    if not is_player(info):
+                        name = (
+                            ev.dest_name if info == ev.dest_guid else ev.src_name
+                        )
+                        if name and name != "nil":
+                            pull.unit_names[info] = name
+                elif t - track[-1][0] >= POSITION_SAMPLE_S:
+                    track.append((t, spot[0], spot[1]))
 
         # SWING_DAMAGE_LANDED duplicates SWING_DAMAGE. Counting both doubles
         # every melee hit -- the same trap as Warcraft Logs counting channel

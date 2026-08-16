@@ -127,6 +127,27 @@ class TestParser(unittest.TestCase):
         self.assertEqual(ev.amount, 101631)
         self.assertIsNone(ev.hp_fraction, "no health data without advanced logging")
 
+    def test_position_reads_real_coordinates(self):
+        ev = parse_line(REAL_SPELL_DAMAGE)
+        self.assertEqual(ev.position, (1377.46, 400.90))
+
+    def test_position_is_refused_on_events_with_an_unmodelled_payload(self):
+        """Position sits at the end of the advanced block, so reading it on an
+        event whose trailing payload is not modelled returns whatever happens
+        to be at those offsets. SPELL_ENERGIZE produced (562.0, 0.0) sitting
+        beside a real arena at (1226, -5052)."""
+        line = (
+            '8/2/2026 21:00:00.000  SPELL_ENERGIZE,Player-1,"A-Realm",0x512,'
+            '0x80000000,Player-1,"A-Realm",0x512,0x80000000,29842,"Second Wind",'
+            '0x1,Player-1,0000000000000000,100,100,0,0,0,0,0,1,60,100,0,'
+            '1226.70,-5052.60,557,1.5,553,20,0,1,0'
+        )
+        ev = parse_line(line)
+        self.assertEqual(ev.event, "SPELL_ENERGIZE")
+        self.assertIsNone(
+            ev.position, "must not guess coordinates from an unmodelled payload"
+        )
+
     def test_malformed_line_returns_none(self):
         self.assertIsNone(parse_line("not a log line"))
         self.assertIsNone(parse_line(""))

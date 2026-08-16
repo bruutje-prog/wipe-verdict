@@ -61,6 +61,65 @@ def alive_time(pull: "Pull", guid: str) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Where everyone was standing
+# ---------------------------------------------------------------------------
+
+#: How far from the requested moment a position sample may be and still count.
+SNAPSHOT_WINDOW_S = 4.0
+
+
+@dataclass(slots=True)
+class Marker:
+    name: str
+    kind: str          # tank | healer | dps | victim | enemy
+    x: float
+    y: float
+    stale: float       # seconds between the sample and the moment asked for
+
+
+def position_snapshot(
+    pull: "Pull",
+    t: float,
+    roles: dict[str, PlayerRole],
+    victim_guid: Optional[str] = None,
+    window: float = SNAPSHOT_WINDOW_S,
+) -> list[Marker]:
+    """Where every unit was at time `t`.
+
+    Positions are only in the log with Advanced Combat Logging on, so this
+    returns nothing without it rather than drawing a misleading empty arena.
+    Each marker carries how stale its sample is, because a position from three
+    seconds ago is not evidence of where somebody stood when they died.
+    """
+    bosses = set(pull.boss_names())
+    out: list[Marker] = []
+    for guid, track in pull.positions.items():
+        best: Optional[tuple[float, float, float]] = None
+        for sample in track:
+            gap = abs(sample[0] - t)
+            if gap <= window and (best is None or gap < abs(best[0] - t)):
+                best = sample
+        if best is None:
+            continue
+
+        if guid in pull.players:
+            kind = "victim" if guid == victim_guid else (
+                roles[guid].role if guid in roles else "dps"
+            )
+            name = pull.players[guid]
+        else:
+            name = pull.unit_names.get(guid, "")
+            # Only the encounter itself; adds and pets would bury the raid.
+            if name not in bosses:
+                continue
+            kind = "enemy"
+        out.append(
+            Marker(name=name, kind=kind, x=best[1], y=best[2], stale=abs(best[0] - t))
+        )
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Avoidable damage
 # ---------------------------------------------------------------------------
 

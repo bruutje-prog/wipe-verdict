@@ -81,7 +81,16 @@
     font-size: 11px; border-radius: 4px; padding: 1px 6px;
     background: var(--panel-2); color: var(--dim);
   }
-  .hist { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+  .hist {
+    list-style: none; margin: 0; padding: 0 4px 0 0; font-size: 14px;
+    /* A progression night runs to 20+ pulls; the earliest ones matter most
+       when asking what changed, so the list scrolls rather than truncating. */
+    max-height: min(60vh, 520px); overflow-y: auto;
+  }
+  .hist::-webkit-scrollbar { width: 9px; }
+  .hist::-webkit-scrollbar-thumb { background: #39405180; border-radius: 5px; }
+  .hist::-webkit-scrollbar-thumb:hover { background: #454e63; }
+  .hist { scrollbar-width: thin; scrollbar-color: #394051 transparent; }
   .hist li {
     display: flex; gap: 8px; align-items: baseline;
     padding: 7px 8px; margin: 0 -8px; border-bottom: 1px solid #23262f;
@@ -102,6 +111,15 @@
   }
   .pinbar button:hover { filter: brightness(1.08); }
   .newpull { color: var(--accent); font-weight: 600; }
+  #map svg { width: 100%; height: auto; max-height: 460px; display: block; }
+  .maplegend {
+    display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px;
+    font-size: 12.5px; color: var(--dim); align-items: center;
+  }
+  .maplegend i {
+    display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+    margin-right: 5px; vertical-align: middle;
+  }
   .empty { color: var(--dim); padding: 30px 0; text-align: center; }
   .warn {
     margin: 14px 22px -4px; padding: 11px 15px; border-radius: 8px;
@@ -144,6 +162,19 @@
       <ol class="findings" id="findings"></ol>
     </div>
 
+    <div class="panel" id="map-panel" style="display:none">
+      <h2>Where everyone was standing <span class="pill" id="map-when"></span></h2>
+      <div id="map"></div>
+      <div class="maplegend">
+        <span><i style="background:var(--bad)"></i> died here</span>
+        <span><i style="background:var(--accent)"></i> boss</span>
+        <span><i style="background:#6ea8ff"></i> tank</span>
+        <span><i style="background:var(--good)"></i> healer</span>
+        <span><i style="background:#9aa3b5"></i> dps</span>
+        <span class="muted" id="map-caveat"></span>
+      </div>
+    </div>
+
     <div class="panel" id="notes-panel" style="display:none">
       <h2>Notes on the config — not raid actions</h2>
       <ul class="evidence" id="notes"></ul>
@@ -173,7 +204,7 @@
 
   <aside>
     <div class="panel">
-      <h2>Tonight</h2>
+      <h2>Tonight <span class="pill" id="pullcount"></span></h2>
       <ul class="hist" id="history"><li class="muted">No pulls yet</li></ul>
     </div>
     <div class="panel">
@@ -209,6 +240,75 @@ function renderFindings(list) {
   }).join("");
 }
 
+const MAP_COLOURS = {
+  victim: "var(--bad)", enemy: "var(--accent)",
+  tank: "#6ea8ff", healer: "var(--good)", dps: "#9aa3b5",
+};
+
+function renderMap(m) {
+  show("map-panel", !!m);
+  if (!m) return;
+  $("map-when").textContent = `${m.victim} died to ${m.killer} at ${m.at}`;
+
+  const pts = m.markers;
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const pad = 6;
+  const minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad;
+  const minY = Math.min(...ys) - pad, maxY = Math.max(...ys) + pad;
+  // Keep the aspect square so distances are not distorted -- a stretched
+  // arena would make someone look further out of position than they were.
+  const span = Math.max(maxX - minX, maxY - minY, 10);
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const x0 = cx - span / 2, y0 = cy - span / 2;
+  const S = 600, sc = S / span;
+  const px = p => (p.y - y0) * sc;          // world Y runs left-right
+  const py = p => S - (p.x - x0) * sc;      // world X runs bottom-top
+
+  const grid = [];
+  for (let g = 0; g <= 4; g++) {
+    const v = (S / 4) * g;
+    grid.push(`<line x1="${v}" y1="0" x2="${v}" y2="${S}" stroke="#242835"/>`);
+    grid.push(`<line x1="0" y1="${v}" x2="${S}" y2="${v}" stroke="#242835"/>`);
+  }
+
+  const order = {dps: 0, healer: 1, tank: 2, enemy: 3, victim: 4};
+  const body = [...pts].sort((a, b) => order[a.kind] - order[b.kind]).map(p => {
+    const X = px(p).toFixed(1), Y = py(p).toFixed(1);
+    const c = MAP_COLOURS[p.kind] || "#9aa3b5";
+    // Fade a marker whose sample is old: it is weaker evidence.
+    const op = p.stale > 2 ? 0.4 : 1;
+    const title = `<title>${esc(p.name)} (${esc(p.kind)}), sample ${p.stale}s away</title>`;
+    if (p.kind === "enemy") {
+      return `<g opacity="${op}">${title}
+        <rect x="${X - 9}" y="${Y - 9}" width="18" height="18" rx="3"
+              fill="${c}" opacity="0.85"/>
+        <text x="${X}" y="${(+Y) + 26}" fill="#c9cede" font-size="13"
+              text-anchor="middle">${esc(p.name)}</text></g>`;
+    }
+    if (p.kind === "victim") {
+      return `<g opacity="${op}">${title}
+        <circle cx="${X}" cy="${Y}" r="17" fill="none" stroke="${c}"
+                stroke-width="2" opacity="0.7"/>
+        <circle cx="${X}" cy="${Y}" r="8" fill="${c}"/>
+        <text x="${X}" y="${(+Y) - 24}" fill="#ffd0d0" font-size="14"
+              font-weight="600" text-anchor="middle">${esc(p.name)}</text></g>`;
+    }
+    return `<g opacity="${op}">${title}
+      <circle cx="${X}" cy="${Y}" r="6" fill="${c}"/>
+      <text x="${X}" y="${(+Y) - 11}" fill="#7d8497" font-size="11"
+            text-anchor="middle">${esc(p.name)}</text></g>`;
+  }).join("");
+
+  $("map").innerHTML =
+    `<svg viewBox="-20 -20 ${S + 40} ${S + 40}" xmlns="http://www.w3.org/2000/svg">
+       ${grid.join("")}${body}
+     </svg>`;
+  const stale = pts.filter(p => p.stale > 2).length;
+  $("map-caveat").textContent =
+    `${pts.length} units · each grid square ≈ ${(span / 4).toFixed(0)}m`
+    + (stale ? ` · ${stale} faded (position sampled >2s from the death)` : "");
+}
+
 function renderLatest(d) {
   if (!d) { show("empty", true); show("verdict", false); return; }
   show("empty", false); show("verdict", true);
@@ -221,6 +321,8 @@ function renderLatest(d) {
   $("headline").textContent = d.headline;
 
   renderFindings(d.findings || []);
+
+  renderMap(d.position_map);
 
   const notes = d.notes || [];
   show("notes-panel", notes.length > 0);
@@ -256,6 +358,7 @@ let pinnedId = null;
 let latestId = null;
 
 function renderHistory(history) {
+  $("pullcount").textContent = history.length ? `${history.length} pulls` : "";
   if (!history.length) {
     $("history").innerHTML = `<li class="muted">No pulls yet</li>`;
     return;
