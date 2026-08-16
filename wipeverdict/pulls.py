@@ -311,9 +311,18 @@ class PullSegmenter:
             values = ev.hp_values
             if values is not None:
                 current, maximum = values
-                name = (
-                    ev.dest_name if ev.info_guid == ev.dest_guid else ev.src_name
-                )
+                # The advanced info unit is sometimes the source and sometimes
+                # the destination -- and sometimes NEITHER. Falling back to the
+                # source's name in that third case files another unit's health
+                # under the boss, which reported a 1:16 Thok wipe as reaching
+                # 6.5% when it actually reached 61.8%. If it cannot be
+                # attributed, it is not recorded.
+                if ev.info_guid == ev.dest_guid:
+                    name = ev.dest_name
+                elif ev.info_guid == ev.src_guid:
+                    name = ev.src_name
+                else:
+                    name = ""
                 if name and name != "nil":
                     frac = max(0.0, min(1.0, current / maximum))
                     slot = pull.enemy_hp.get(name)

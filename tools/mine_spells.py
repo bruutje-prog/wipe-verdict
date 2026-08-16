@@ -88,9 +88,14 @@ def main() -> int:
         print(f"{spell_id:>9}  {name:<32} x{count:<5} by {who}")
 
     print("\n## enemy casts that were interrupted at least once (interruptible)")
+    # Only interrupts performed BY the raid. Bosses interrupt players too --
+    # Thok's Deafening Screech fills this list with the raid's own Chain Heals
+    # if the source is not checked.
     seen: dict[int, tuple[str, int]] = {}
     for p in pulls:
         for i in p.interrupts:
+            if not is_player(i.src_guid):
+                continue
             name, count = seen.get(i.extra_spell_id, (i.extra_spell_name, 0))
             seen[i.extra_spell_id] = (name, count + 1)
     for spell_id, (name, count) in sorted(seen.items(), key=lambda kv: -kv[1][1]):

@@ -49,6 +49,12 @@ class PullDelta:
     avoidable_hits_before: int
     first_death: Optional[float]
     first_death_before: Optional[float]
+    #: hits counted only for mechanics that occurred in BOTH pulls
+    avoidable_shared: int = 0
+    avoidable_shared_before: int = 0
+    #: mechanics that happened in only one of the two pulls
+    only_now: list[str] = field(default_factory=list)
+    only_before: list[str] = field(default_factory=list)
 
     @property
     def progressed(self) -> Optional[bool]:
@@ -68,9 +74,28 @@ class PullDelta:
             f"lasted {self.duration:.0f}s vs {self.duration_before:.0f}s"
         )
         out.append(f"{self.deaths} deaths vs {self.deaths_before}")
-        out.append(
-            f"{self.avoidable_hits} avoidable hits vs {self.avoidable_hits_before}"
-        )
+        # Only compare mechanics that occurred in both pulls. Thok's breath
+        # depends on which captive he drinks, so a raw hit total compares two
+        # different fights and reports a difference that nobody caused.
+        if self.only_now or self.only_before:
+            out.append(
+                f"{self.avoidable_shared} avoidable hits vs "
+                f"{self.avoidable_shared_before}, counting only mechanics that "
+                f"occurred in both pulls"
+            )
+            if self.only_now:
+                out.append(
+                    f"only this pull saw: {', '.join(self.only_now[:4])}"
+                )
+            if self.only_before:
+                out.append(
+                    f"only the earlier pull saw: {', '.join(self.only_before[:4])}"
+                )
+        else:
+            out.append(
+                f"{self.avoidable_hits} avoidable hits vs "
+                f"{self.avoidable_hits_before}"
+            )
         if self.first_death is not None and self.first_death_before is not None:
             out.append(
                 f"first death at {self.first_death:.0f}s vs "
@@ -198,7 +223,20 @@ class Session:
         if best is None:
             return None
         p, q = report.pull, best.pull
+
+        now_by_mech: dict[str, int] = defaultdict(int)
+        for row in report.avoidable:
+            now_by_mech[row.mechanic] += row.count
+        before_by_mech: dict[str, int] = defaultdict(int)
+        for row in best.avoidable:
+            before_by_mech[row.mechanic] += row.count
+        shared = set(now_by_mech) & set(before_by_mech)
+
         return PullDelta(
+            avoidable_shared=sum(now_by_mech[m] for m in shared),
+            avoidable_shared_before=sum(before_by_mech[m] for m in shared),
+            only_now=sorted(set(now_by_mech) - set(before_by_mech)),
+            only_before=sorted(set(before_by_mech) - set(now_by_mech)),
             compared_to=q.label,
             boss_pct=p.best_boss_percent(),
             boss_pct_before=q.best_boss_percent(),

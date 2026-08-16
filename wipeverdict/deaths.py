@@ -47,7 +47,11 @@ COLLAPSE_SHARE = 0.4
 #: Talents that convert a death into a reprieve. Dying "to" these means the
 #: talent WORKED and bought the raid time -- reporting it as a death is wrong.
 REPRIEVE_SPELLS = {
+    # This build logs the mage talent as "Cauterize Master" (119899), not
+    # "Cauterize". Matching only the tidy name would report a mage whose talent
+    # just saved them as an ordinary death.
     "cauterize",
+    "cauterize master",
     "ardent defender",
     "guardian spirit",
     "purgatory",

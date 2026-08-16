@@ -132,6 +132,39 @@ class TestSegmentation(unittest.TestCase):
         self.assertEqual(pull.duration, 300.0)
         self.assertFalse(pull.success)
 
+    def test_health_is_not_attributed_to_a_unit_it_does_not_belong_to(self):
+        """The advanced info unit is sometimes neither source nor destination.
+
+        Falling back to the source's name in that case files a third party's
+        health under the boss. It reported a 1:16 Thok wipe as reaching 6.5%
+        when the raid actually got him to 61.8% -- a wrong answer to the single
+        most-quoted question a raid leader asks.
+        """
+        adv = (
+            "Creature-OTHER,0000000000000000,10,1000,"      # 1% health, NOT the boss
+            "0,0,0,0,0,-1,0,0,0,1.0,2.0,557,0.0,93"
+        )
+        payload = "500,600,-1,1,0,0,0,nil,nil,nil,ST"
+        line = (
+            '8/2/2026 21:33:30.548  SPELL_PERIODIC_DAMAGE,'
+            'Creature-BOSS,"Thok the Bloodthirsty",0xa48,0x80000000,'
+            'Player-1,"Victim-Realm",0x514,0x80000000,'
+            f'1234,"Bite",0x1,{adv},{payload}'
+        )
+        ev = parse_line(line)
+        self.assertEqual(ev.info_guid, "Creature-OTHER")
+        self.assertAlmostEqual(ev.hp_fraction, 0.01)
+
+        seg = PullSegmenter()
+        seg.feed(parse_line(
+            '8/2/2026 21:33:00.000  ENCOUNTER_START,1599,"Thok",6,25,1136,19'
+        ))
+        seg.feed(ev)
+        self.assertNotIn(
+            "Thok the Bloodthirsty", seg.current.enemy_hp,
+            "health of a third-party unit must not be filed under the boss",
+        )
+
     def test_combatant_info_does_not_register_players_as_faction(self):
         """COMBATANT_INFO leads GUID,faction -- it looks exactly like a prefix
         and registered every raider under the name "0"."""
@@ -362,6 +395,42 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(
             cfg.substitute_for("Blood Shield uptime"), "Death Strike cast rate"
         )
+
+
+class TestDelta(unittest.TestCase):
+    def test_only_mechanics_present_in_both_pulls_are_compared(self):
+        """Thok's breath depends on which captive he drinks, so two pulls can
+        contain different mechanics. Comparing raw totals then reports a
+        difference nobody caused."""
+        from wipeverdict.session import PullDelta
+
+        d = PullDelta(
+            compared_to="pull 7", boss_pct=0.0, boss_pct_before=11.5,
+            duration=383, duration_before=292, deaths=8, deaths_before=28,
+            avoidable_hits=156, avoidable_hits_before=0,
+            first_death=56, first_death_before=101,
+            avoidable_shared=0, avoidable_shared_before=0,
+            only_now=["Freezing Breath", "Tail Lash"], only_before=[],
+        )
+        text = " | ".join(d.lines())
+        self.assertIn("occurred in both pulls", text)
+        self.assertIn("Freezing Breath", text)
+        self.assertNotIn("156 avoidable hits vs 0", text)
+
+    def test_identical_mechanics_compare_directly(self):
+        from wipeverdict.session import PullDelta
+
+        d = PullDelta(
+            compared_to="pull 2", boss_pct=5.0, boss_pct_before=9.0,
+            duration=300, duration_before=280, deaths=8, deaths_before=12,
+            avoidable_hits=14, avoidable_hits_before=22,
+            first_death=56, first_death_before=40,
+            avoidable_shared=14, avoidable_shared_before=22,
+            only_now=[], only_before=[],
+        )
+        text = " | ".join(d.lines())
+        self.assertIn("14 avoidable hits vs 22", text)
+        self.assertNotIn("occurred in both pulls", text)
 
 
 class TestRanking(unittest.TestCase):

@@ -95,6 +95,8 @@ refreshed_by_other_spells:
 # raid time; report the reprieve that was not converted, not a death.
 # ---------------------------------------------------------------------------
 reprieve_talents:
+  # Logged as "Cauterize Master" (spell 119899) on this build, not "Cauterize".
+  - {name: "Cauterize Master", spec: "mage",       grace_s: 6}
   - {name: "Cauterize",      spec: "mage",         grace_s: 6}
   - {name: "Ardent Defender", spec: "protection paladin", grace_s: 10}
   - {name: "Guardian Spirit", spec: "holy priest", grace_s: 10}
