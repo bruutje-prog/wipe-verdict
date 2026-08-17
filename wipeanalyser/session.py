@@ -129,6 +129,11 @@ class RepeatedFailure:
     pulls_seen: int
     players: list[str]
     total_hits: int
+    #: per-player hit counts across those pulls, for naming who is
+    #: over-exposed rather than reciting the whole raid
+    per_player: dict[str, int] = field(default_factory=dict)
+    #: True when a human has confirmed the mechanic really is avoidable
+    confirmed: bool = False
     #: everyone who raided in the pulls this covers.
     #:
     #: `players` accumulates across several pulls, so with roster swaps it can
@@ -141,6 +146,23 @@ class RepeatedFailure:
     @property
     def share(self) -> float:
         return len(self.players) / self.roster if self.roster else 0.0
+
+    def outliers(self) -> list[tuple[str, int]]:
+        """Players taking this far more than the rest of the raid.
+
+        In a messy fight nearly everyone is clipped once, so the count of
+        people hit says nothing. Sustained exposure does, and it is the thing
+        that actually kills somebody.
+        """
+        counts = sorted(self.per_player.values())
+        if len(counts) < 4:
+            return []
+        median = counts[len(counts) // 2]
+        floor = max(median * 2, median + 2)
+        return sorted(
+            ((n, c) for n, c in self.per_player.items() if c >= floor),
+            key=lambda kv: -kv[1],
+        )[:5]
 
     @property
     def raid_wide(self) -> bool:
@@ -327,6 +349,7 @@ class Session:
         )
 
     def _repeated(self, report: PullReport) -> list[RepeatedFailure]:
+        boss_cfg = report.boss
         history = self.previous(report.pull) + [report]
         history = [
             r for r in history
@@ -335,7 +358,8 @@ class Session:
         by_mech: dict[int, dict] = defaultdict(
             lambda: {
                 "name": "", "pulls": set(), "players": set(), "hits": 0,
-                "roster": set(),
+                "roster": set(), "per_player": defaultdict(int),
+                "confirmed": False,
             }
         )
         for r in history:
@@ -349,6 +373,9 @@ class Session:
                 slot["pulls"].add(id(r.pull))
                 slot["players"].add(row.player)
                 slot["hits"] += row.count
+                slot["per_player"][row.player] += row.count
+                mech = boss_cfg.avoidable.get(row.spell_id) if boss_cfg else None
+                slot["confirmed"] = bool(mech and mech.confirmed)
 
         out = [
             RepeatedFailure(
@@ -358,6 +385,8 @@ class Session:
                 players=sorted(slot["players"]),
                 total_hits=slot["hits"],
                 roster=len(slot["roster"]),
+                per_player=dict(slot["per_player"]),
+                confirmed=slot["confirmed"],
             )
             for spell_id, slot in by_mech.items()
         ]

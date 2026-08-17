@@ -98,6 +98,8 @@ def review_boss(pulls: list[Pull], boss: BossConfig) -> list[MechanicEvidence]:
             bits.append(f"amount_at_least: {m.amount_at_least:,}")
         if m.min_gap_s:
             bits.append(f"min_gap_s: {m.min_gap_s:g}")
+        if m.confirmed:
+            bits.append("confirmed")
         catalogue[sid] = ("avoidable", ", ".join(bits))
     for sid, t in boss.tank_busters.items():
         catalogue[sid] = (
@@ -242,7 +244,11 @@ def _flag(ev: MechanicEvidence, boss: BossConfig) -> None:
                 f"for it -- so it counts ZERO despite {ev.hits} damage events. "
                 f"It needs count: hits, or it is doing nothing at all"
             )
-        if ev.share >= UNAVOIDABLE_SHARE and ev.pulls_seen >= 2:
+        if (
+            ev.share >= UNAVOIDABLE_SHARE
+            and ev.pulls_seen >= 2
+            and not (mech is not None and mech.confirmed)
+        ):
             ev.concerns.append(
                 f"hits {ev.victims} of {ev.raid} raiders across {ev.pulls_seen} "
                 f"pulls - is it actually avoidable, or unavoidable raid damage?"

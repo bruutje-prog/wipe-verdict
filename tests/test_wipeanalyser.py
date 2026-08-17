@@ -967,6 +967,33 @@ class TestSpecDetection(unittest.TestCase):
         self.assertEqual(spec, "")
 
 
+class TestConfirmedOutliers(unittest.TestCase):
+    """When a mechanic clips nearly everyone, name who stayed in it."""
+
+    def _rep(self, counts: dict[str, int], confirmed: bool):
+        from wipeanalyser.session import RepeatedFailure
+
+        return RepeatedFailure(
+            mechanic="Toxic Storm", spell_id=144017, pulls_seen=3,
+            players=sorted(counts), total_hits=sum(counts.values()),
+            per_player=dict(counts), confirmed=confirmed, roster=len(counts),
+        )
+
+    def test_a_player_far_above_the_median_is_named(self):
+        counts = {f"P{i}": 2 for i in range(10)}
+        counts["Wiska"] = 14
+        self.assertEqual(self._rep(counts, True).outliers()[0], ("Wiska", 14))
+
+    def test_an_even_spread_names_nobody(self):
+        """If everyone took about the same, nobody stayed in it longer -- and
+        the whole point is not to recite the raid back at itself."""
+        counts = {f"P{i}": 3 for i in range(10)}
+        self.assertEqual(self._rep(counts, True).outliers(), [])
+
+    def test_too_few_players_to_have_a_median(self):
+        self.assertEqual(self._rep({"A": 9, "B": 1}, True).outliers(), [])
+
+
 class TestShareText(unittest.TestCase):
     def _report(self):
         cfg = load_config()

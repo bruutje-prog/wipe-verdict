@@ -202,6 +202,45 @@ def _repeated(report: "PullReport", session: "Session") -> list[Finding]:
         # "29/25", which is not a possible fraction and made the note look
         # broken even where its point was right.
         if rep.share >= 0.8:
+            outliers = rep.outliers()
+            # Same cap as the other repeated findings. Three mechanics of the
+            # same shape filled three of five slots on a Dark Shaman pull and
+            # pushed the cooldown finding out entirely.
+            if rep.confirmed and outliers and len(out) < 2:
+                # Confirmed avoidable AND hitting nearly everyone: in a messy
+                # fight a single clip is unavoidable in practice, so the raid
+                # count is noise. Who STAYED in it is the finding, and it is
+                # the thing that actually kills somebody.
+                who = ", ".join(f"{n} x{c}" for n, c in outliers[:4])
+                out.append(
+                    Finding(
+                        rank_class=RANK_REPEATED,
+                        score=float(outliers[0][1]) * 5,
+                        action=(
+                            f"{rep.mechanic} is catching almost everyone, but "
+                            f"these are the ones staying in it: {who}."
+                        ),
+                        evidence=[
+                            f"{len(rep.players)} of {rep.roster} raiders were "
+                            f"clipped at least once across {rep.pulls_seen} "
+                            f"pulls, so being hit is not the signal",
+                            "listed players took at least twice the raid median",
+                            "confirmed avoidable, so this is exposure time, "
+                            "not a config question",
+                        ],
+                        method="per-player hit counts against the raid median "
+                               "for the same mechanic",
+                        rejected="how many players were hit, which in a messy "
+                                 "fight is nearly all of them every pull",
+                        scope="individual",
+                        players=[n for n, _ in outliers],
+                        topic=f"mechanic:{rep.spell_id}",
+                        config_ref=f"bosses.yaml -> avoidable -> {rep.mechanic}",
+                    )
+                )
+                continue
+            if rep.confirmed:
+                continue    # confirmed, but nobody stands out: nothing to say
             suspect.append(f"{rep.mechanic} ({len(rep.players)}/{rep.roster})")
             continue
 

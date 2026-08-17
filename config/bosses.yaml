@@ -46,10 +46,14 @@ bosses:
       # 450k every 2s to anyone within 9 yards, and the storm moves (tooltip).
       # Ticking, with no aura to count by, so hits inside 3s of each other are
       # one stay rather than several mistakes: 49 of 111 gaps were under 3s.
-      - {spell_id: 144017, name: "Toxic Storm",   count: hits, min_gap_s: 3}
+      # Confirmed avoidable by the raid leader (17/08): the fight is messy so
+      # nearly everyone gets clipped, but it should only kill somebody who
+      # stays in it. So incidence is noise here and exposure is the finding.
+      - {spell_id: 144017, name: "Toxic Storm",   count: hits, min_gap_s: 3,
+         confirmed: true}
       # 450k every 1s within 5 yards, but hits are discrete in practice --
       # median gap between hits on one player is 27.6s, so no collapsing.
-      - {spell_id: 144030, name: "Toxic Tornado", count: hits}
+      - {spell_id: 144030, name: "Toxic Tornado", count: hits, confirmed: true}
       # Two components under one id (tooltip): 999,999 within 17 yards, and
       # 480,000 to ALL players on impact. Only the close hit is a mistake.
       # Across 160 hits the maximum was 432,000 and the median 347,760 -- all
@@ -82,7 +86,7 @@ bosses:
       # Foul Stream is discrete by comparison -- median 34.1s between hits on
       # one player -- so no collapsing, and at 21% on tanks (under 3x expected)
       # no exemption either.
-      - {spell_id: 144090, name: "Foul Stream", count: hits}
+      - {spell_id: 144090, name: "Foul Stream", count: hits, confirmed: true}
     # OMITTED - Toxic Mist (144089) is NOT avoidable. The tooltip is explicit:
     # it "injects several players", so it is targeted rather than stood in, and
     # it "pierces all immunities". It was flagged on 21 of 24 raiders every

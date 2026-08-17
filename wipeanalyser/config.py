@@ -41,6 +41,12 @@ class Mechanic:
     #: one mistake per tick -- the same trap as counting a channel's ticks as
     #: casts. For ticking damage that applies no aura to count by instead.
     min_gap_s: float = 0.0
+    #: True when somebody who plays the fight has confirmed this really is
+    #: avoidable. The review then stops asking whether it is, and findings
+    #: report WHO is over-exposed rather than how many were clipped -- in a
+    #: messy fight nearly everyone gets caught once, so incidence is noise and
+    #: only sustained exposure is a mistake.
+    confirmed: bool = False
 
     @property
     def by_applications(self) -> bool:
@@ -217,6 +223,7 @@ def load_config(config_dir: Optional[Path | str] = None) -> Config:
                     exempt_roles=tuple(row.get("exempt_roles") or ()),
                     amount_at_least=_as_int(row.get("amount_at_least"), 0),
                     min_gap_s=float(row.get("min_gap_s", 0.0)),
+                    confirmed=bool(row.get("confirmed", False)),
                 )
                 if m.count not in (COUNT_HITS, COUNT_APPLICATIONS):
                     raise ValueError(
