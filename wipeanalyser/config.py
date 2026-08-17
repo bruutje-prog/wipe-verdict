@@ -19,6 +19,11 @@ DEFAULT_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 
 COUNT_HITS = "hits"
 COUNT_APPLICATIONS = "applications"
+#: Count CLUSTERS of hits rather than hits. For a mechanic where one hit is
+#: acceptable traffic and several in quick succession is the mistake, neither
+#: of the other two modes measures the right thing: `hits` counts the
+#: acceptable ones, and `applications` collapses a whole exchange into one.
+COUNT_BURSTS = "bursts"
 
 
 @dataclass(slots=True)
@@ -47,6 +52,14 @@ class Mechanic:
     #: messy fight nearly everyone gets caught once, so incidence is noise and
     #: only sustained exposure is a mistake.
     confirmed: bool = False
+    #: for count: bursts -- how close together hits must be to be one burst,
+    #: and how many it takes before the burst counts as a mistake
+    burst_window_s: float = 10.0
+    burst_hits: int = 2
+
+    @property
+    def by_bursts(self) -> bool:
+        return self.count == COUNT_BURSTS
 
     @property
     def by_applications(self) -> bool:
@@ -224,11 +237,14 @@ def load_config(config_dir: Optional[Path | str] = None) -> Config:
                     amount_at_least=_as_int(row.get("amount_at_least"), 0),
                     min_gap_s=float(row.get("min_gap_s", 0.0)),
                     confirmed=bool(row.get("confirmed", False)),
+                    burst_window_s=float(row.get("burst_window_s", 10.0)),
+                    burst_hits=_as_int(row.get("burst_hits"), 2),
                 )
-                if m.count not in (COUNT_HITS, COUNT_APPLICATIONS):
+                if m.count not in (COUNT_HITS, COUNT_APPLICATIONS, COUNT_BURSTS):
                     raise ValueError(
-                        f"{key}/{m.name}: count must be "
-                        f"{COUNT_HITS!r} or {COUNT_APPLICATIONS!r}, got {m.count!r}"
+                        f"{key}/{m.name}: count must be one of "
+                        f"{COUNT_HITS!r}, {COUNT_APPLICATIONS!r} or "
+                        f"{COUNT_BURSTS!r}, got {m.count!r}"
                     )
                 boss.avoidable[m.spell_id] = m
             for row in body.get("shared_damage") or []:

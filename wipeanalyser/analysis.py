@@ -164,6 +164,7 @@ def avoidable_table(
     hits: dict[tuple[str, int], int] = defaultdict(int)
     damage: dict[tuple[str, int], int] = defaultdict(int)
     last_hit: dict[tuple[str, int], float] = {}
+    burst_times: dict[tuple[str, int], list[float]] = defaultdict(list)
     for d in pull.damage_taken:
         mech = boss.is_avoidable(d.spell_id)
         if mech is None:
@@ -175,7 +176,11 @@ def avoidable_table(
             continue
         key = (d.dest_guid, d.spell_id)
         damage[key] += d.amount + d.absorbed
-        if not mech.by_applications:
+        if mech.by_bursts:
+            # One hit is acceptable traffic; several close together are the
+            # mistake. Collect the times and resolve into bursts afterwards.
+            burst_times[key].append(d.t)
+        elif not mech.by_applications:
             # Damage always totals every tick; the HIT count is what a gap
             # collapses, so "how much did this cost" stays honest while "how
             # many mistakes" does not inflate with tick rate.
@@ -199,6 +204,22 @@ def avoidable_table(
         if not is_player(a.dest_guid):
             continue
         hits[(a.dest_guid, a.spell_id)] += 1
+
+    # Resolve bursts: a run of hits each within the window of the previous,
+    # counted only when the run is long enough to be a mistake.
+    for key, times in burst_times.items():
+        mech = boss.avoidable[key[1]]
+        times.sort()
+        run = 1
+        for prev, now in zip(times, times[1:]):
+            if now - prev <= mech.burst_window_s:
+                run += 1
+                continue
+            if run >= mech.burst_hits:
+                hits[key] += 1
+            run = 1
+        if run >= mech.burst_hits:
+            hits[key] += 1
 
     deaths_to: dict[tuple[str, int], int] = defaultdict(int)
     for death in pull.deaths:

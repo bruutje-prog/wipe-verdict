@@ -449,7 +449,18 @@ bosses:
     avoidable:
       # Fire left on the ground by the laser. Counted by application, because
       # standing in it once is one mistake however long the tick list is.
-      - {spell_id: 143856, name: "Superheated",     count: applications}
+      # Raid leader (17/08): one hit from either of these is acceptable, and
+      # several in quick succession is the mistake. Neither `hits` nor
+      # `applications` measures that -- hits counts the acceptable ones, and
+      # applications collapses a whole exchange into one -- so both count
+      # BURSTS: a run of hits each within 10s of the last, needing 2 to
+      # register.
+      #
+      # Superheated ticks every second, so a burst is literally "stayed in the
+      # fire two seconds or more". A brush that costs one tick does not count.
+      # Across the 16/08 pulls that is 38 stays over 21 players.
+      - {spell_id: 143856, name: "Superheated", count: bursts,
+         burst_window_s: 10, burst_hits: 2, confirmed: true}
       # Detonate! (143002) OMITTED - not avoidable. The tooltip gives its
       # radius as 300 YARDS, which is the whole room, so there is nowhere to
       # stand. It was flagged on 25 of 25 raiders every pull. What is
@@ -463,7 +474,11 @@ bosses:
       # The log agrees: 100% of the 96 player hits landed within 25s of a
       # Launch Sawblade cast, median lag 0.7s, and the bleed left on the
       # Automated Shredder (143328) is the same blade touching the add.
-      - {spell_id: 143327, name: "Serrated Slash",  count: hits}
+      # Serrated Slash is discrete by contrast -- 21.7s median between hits --
+      # so a burst is walking into blades twice in ten seconds rather than
+      # lingering. 22 occasions over 15 players.
+      - {spell_id: 143327, name: "Serrated Slash", count: bursts,
+         burst_window_s: 10, burst_hits: 2, confirmed: true}
       - {spell_id: 144210, name: "Death From Above", count: hits}
     # OMITTED - Overload (145444) is NOT avoidable. It is scheduled raid damage
     # that needs a raid cooldown, so it belongs to the damage-window analysis

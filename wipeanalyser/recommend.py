@@ -240,7 +240,41 @@ def _repeated(report: "PullReport", session: "Session") -> list[Finding]:
                 )
                 continue
             if rep.confirmed:
-                continue    # confirmed, but nobody stands out: nothing to say
+                # Confirmed, hitting nearly everyone, and nobody stands out.
+                # Silence would be wrong: when the count already excludes the
+                # acceptable single hits -- as `bursts` does -- an evenly
+                # spread total means the WHOLE raid is repeating it, which is
+                # a raid-wide problem rather than nobody's.
+                if len(out) >= 2 or rep.total_hits < rep.roster:
+                    continue
+                out.append(
+                    Finding(
+                        rank_class=RANK_REPEATED,
+                        score=float(rep.total_hits),
+                        action=(
+                            f"{rep.mechanic}: {rep.total_hits} across "
+                            f"{len(rep.players)} players over {rep.pulls_seen} "
+                            f"pulls, with nobody standing out - the whole raid "
+                            f"is repeating it."
+                        ),
+                        evidence=[
+                            f"averages {rep.total_hits / max(1, len(rep.players)):.1f} "
+                            f"per player, and no one is at twice the median",
+                            "single hits are already excluded from this count, "
+                            "so these are repeats rather than bad luck",
+                            "spread evenly, so it is a raid-wide habit and not "
+                            "somebody to name",
+                        ],
+                        method="clusters of hits per player, against the raid median",
+                        rejected="naming the highest player, who on an even "
+                                 "spread is only the unluckiest",
+                        scope="raid-wide",
+                        players=rep.players,
+                        topic=f"mechanic:{rep.spell_id}",
+                        config_ref=f"bosses.yaml -> avoidable -> {rep.mechanic}",
+                    )
+                )
+                continue
             suspect.append(f"{rep.mechanic} ({len(rep.players)}/{rep.roster})")
             continue
 
