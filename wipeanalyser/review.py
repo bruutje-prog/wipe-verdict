@@ -153,8 +153,24 @@ def review_boss(pulls: list[Pull], boss: BossConfig) -> list[MechanicEvidence]:
                 if prev is not None and d.t - prev < mech.min_gap_s:
                     continue
                 last_counted[key] = d.t
-            counted[sid] += 1
-            counted_victims[sid].add(d.dest_guid)
+            if not mech.by_applications:
+                counted[sid] += 1
+                counted_victims[sid].add(d.dest_guid)
+
+    # An applications-counted mechanic is NOT counted from damage events, so
+    # counting them here reports the tick total as though it were the figure
+    # the table uses. Superheated read as 575 when the table counts 212, and
+    # that gap is what made a ticking mechanic look unhandled when it was
+    # already handled.
+    for pull in pulls:
+        for a in pull.auras:
+            mech = boss.avoidable.get(a.spell_id)
+            if mech is None or not mech.by_applications or not a.applied:
+                continue
+            if not is_player(a.dest_guid):
+                continue
+            counted[a.spell_id] += 1
+            counted_victims[a.spell_id].add(a.dest_guid)
 
     out: list[MechanicEvidence] = []
     for sid, (category, settings) in sorted(
@@ -242,6 +258,11 @@ def _flag(ev: MechanicEvidence, boss: BossConfig) -> None:
         if (
             mech is not None
             and not mech.amount_at_least
+            # amount_at_least filters DAMAGE events, and an applications-counted
+            # mechanic takes its count from auras -- so suggesting it here would
+            # change the damage total and not one thing about the count. A
+            # suggestion that does not do what it says is worse than silence.
+            and not mech.by_applications
             and ev.p10 > 0
             and ev.p90 / ev.p10 >= BIMODAL_RATIO
         ):
@@ -286,7 +307,9 @@ def render_review(pulls: list[Pull], boss: BossConfig, width: int = 78) -> str:
                     f"     the config counts {r.counted_hits} of those, on "
                     f"{r.counted_victims}/{r.raid} raiders"
                 )
-            gap = f", repeat every {r.median_gap}s" if r.median_gap else ""
+            gap = (
+                f", damage ticks every {r.median_gap}s" if r.median_gap else ""
+            )
             lines.append(
                 f"     damage median {r.median_damage:,}, "
                 f"10th-90th {r.p10:,}-{r.p90:,}, max {r.max_damage:,}{gap}"
