@@ -287,17 +287,62 @@ bosses:
       - {spell_id: 143982, name: "Vicious Assault",     expect_cooldown: true}
       - {spell_id: 143984, name: "Vicious Assault",     expect_cooldown: true}
       - {spell_id: 143985, name: "Vicious Assault",     expect_cooldown: true}
-      # Xaril the Poisoned Mind -- only 6 hits in the sample
+      # Xaril the Poisoned Mind.
+      # Caustic Blood is the clearest expect_cooldown case in the instance:
+      # the tooltip states it "will fail to hit tanks who are using their
+      # Active Mitigation abilities", so a tank taking it at all is a missed
+      # mitigation window rather than bad luck. Ten stacks trigger Bloody
+      # Explosion for 600k to the entire raid.
+      - {spell_id: 142315, name: "Caustic Blood",       expect_cooldown: true}
+      # Amplifier rather than damage: each stack makes Kil'ruk hit 10% harder.
       - {spell_id: 142929, name: "Tenderizing Strikes", expect_cooldown: true}
+      # Skeer the Bloodseeker. Hew is the strike, Hewn the debuff it leaves --
+      # each stack makes Rik'kal hit the victim 10% harder. Both tank-facing,
+      # so neither belongs in the avoidable table.
+      - {spell_id: 143274, name: "Hew",                 expect_cooldown: true}
+      - {spell_id: 143275, name: "Hewn",                expect_cooldown: false}
+      # Bloodletting damages its target and spawns Bloods (4 on 25 Heroic)
+      # that heal a Paragon unless killed first. The damage is tank-facing;
+      # the part that decides pulls is whether the Bloods die in time, which
+      # is add control rather than anything this table measures.
+      - {spell_id: 143280, name: "Bloodletting",        expect_cooldown: false}
       # Rik'kal the Dissector
       - {spell_id: 143278, name: "Genetic Alteration",  expect_cooldown: false}
       - {spell_id: 143339, name: "Injection",           expect_cooldown: false}
 
-    # Skeer the Bloodseeker contributed TWO hits to the whole sample --
-    # Bloodletting (143280) and Hew (143274). Neither is classified here
-    # because two events cannot tell an avoidable mechanic from a tank hit
-    # from unavoidable raid damage. They are the first thing to fix when a
-    # heroic pull exists, or from a tooltip.
+    # OMITTED - Toxic Injection (142528) is the opening setup: Xaril injects
+    # ALL players with a red, blue or yellow toxin. Nobody avoids it and it is
+    # what makes the catalyst mechanic work.
+
+    # ------------------------------------------------------------------
+    # NOT YET CONFIGURED, because they do not exist in the sample at all.
+    # These are HEROIC-only and the seed is a 25 Normal kill, so the first
+    # heroic pull will produce mechanics this file has never seen. Mine it
+    # immediately (tools/mine_spells.py) rather than trusting a quiet table.
+    #
+    #   Choose Catalyst -- Xaril picks a catalyst and every raider's toxin
+    #   reacts to it. Three reactions, each needing different handling:
+    #
+    #     Orange: a ring of Fire expands from each affected player. The
+    #             tooltip is explicit that you do NOT need to react to your
+    #             own ring, only to your allies' -- so if it is ever added as
+    #             avoidable, a hit from a player's own ring must not count.
+    #     Purple: the victim runs forward leaving a Canned Heat trail for
+    #             40s, 188,000 Fire per second to anyone standing in it.
+    #             Ticking, so it will want min_gap_s like Toxic Storm.
+    #     Green:  a wandering Eerie Fog, 125,000 Nature per second for 9s,
+    #             and Chilled to the Bone raises further fog damage by 30%.
+    #             CAREFUL: entering the fog SHRINKS it, and three entries
+    #             dissipate it. Entering is the job. Treating fog damage as
+    #             avoidable would blame the people clearing it, which is the
+    #             mistake already made once with Imploding Energy -- model it
+    #             as a soak or leave it out.
+    #
+    #   Bloody Explosion -- 600k to the entire raid when Caustic Blood
+    #   reaches 10 stacks. Absent from the sample because it never happened.
+    #   When an id exists this is a failure event worth counting outright,
+    #   the same shape as a missed soak.
+    # ------------------------------------------------------------------
 
     interruptible: []
 
