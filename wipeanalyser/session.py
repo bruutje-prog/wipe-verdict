@@ -59,6 +59,10 @@ class PullDelta:
     #: mechanics that happened in only one of the two pulls
     only_now: list[str] = field(default_factory=list)
     only_before: list[str] = field(default_factory=list)
+    #: players who changed specialisation between the two pulls. The brief is
+    #: explicit that two specs must never be blended, and a player compared
+    #: across a spec change is two different characters.
+    spec_changes: list[str] = field(default_factory=list)
 
     @property
     def progressed(self) -> Optional[bool]:
@@ -104,6 +108,11 @@ class PullDelta:
             out.append(
                 f"first death at {self.first_death:.0f}s vs "
                 f"{self.first_death_before:.0f}s"
+            )
+        if self.spec_changes:
+            out.append(
+                "changed spec between these pulls, so per-player comparison "
+                "does not hold for them: " + ", ".join(self.spec_changes[:4])
             )
         return out
 
@@ -228,7 +237,7 @@ class Session:
             # Let the config name the encounter's units before anything
             # asks how close the raid got.
             pull.configured_bosses = list(boss.boss_units)
-        roles = detect_roles(pull)
+        roles = detect_roles(pull, cfg.spec_signatures)
 
         report = PullReport(
             pull=pull,
@@ -274,7 +283,19 @@ class Session:
             before_by_mech[row.mechanic] += row.count
         shared = set(now_by_mech) & set(before_by_mech)
 
+        # A player who swapped spec is not the same player for comparison
+        # purposes, so say which ones did rather than quietly averaging them.
+        before_specs = {
+            r.name: r.spec for r in best.roles.values() if r.spec
+        }
+        spec_changes = sorted(
+            name for name, r in
+            ((r.name, r) for r in report.roles.values() if r.spec)
+            if name in before_specs and before_specs[name] != r.spec
+        )
+
         return PullDelta(
+            spec_changes=spec_changes,
             avoidable_shared=sum(now_by_mech[m] for m in shared),
             avoidable_shared_before=sum(before_by_mech[m] for m in shared),
             only_now=sorted(set(now_by_mech) - set(before_by_mech)),

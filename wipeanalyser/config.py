@@ -121,6 +121,8 @@ class CooldownDef:
     cooldown_s: float
     spec: str = ""
     note: str = ""
+    #: interrupt reach in yards; 0 means unknown, and range is then not checked
+    range_yd: float = 0.0
 
 
 @dataclass(slots=True)
@@ -140,6 +142,8 @@ class Config:
     refreshed_by: dict[str, str] = field(default_factory=dict)
     reprieve_talents: dict[str, float] = field(default_factory=dict)
     confounded: list[dict] = field(default_factory=list)
+    #: spec name -> the abilities only that spec presses
+    spec_signatures: dict[str, frozenset[str]] = field(default_factory=dict)
 
     def boss(self, encounter_id: int) -> Optional[BossConfig]:
         return self.bosses.get(encounter_id)
@@ -265,6 +269,7 @@ def load_config(config_dir: Optional[Path | str] = None) -> Config:
                 name=row["name"],
                 cooldown_s=float(row.get("cooldown_s", 15)),
                 spec=row.get("spec", ""),
+                range_yd=float(row.get("range_yd", 0)),
             )
             cfg.interrupt_abilities[cd.name.lower()] = cd
         for row in raw.get("non_stacking") or []:
@@ -280,5 +285,9 @@ def load_config(config_dir: Optional[Path | str] = None) -> Config:
         for row in raw.get("reprieve_talents") or []:
             cfg.reprieve_talents[row["name"].lower()] = float(row.get("grace_s", 6))
         cfg.confounded = list(raw.get("confounded_metrics") or [])
+        for row in raw.get("spec_signatures") or []:
+            cfg.spec_signatures[row["spec"]] = frozenset(
+                a.lower() for a in (row.get("abilities") or [])
+            )
 
     return cfg

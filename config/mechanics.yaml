@@ -107,23 +107,72 @@ reprieve_talents:
 # Interrupt abilities and their cooldowns, used to work out who was actually
 # available when an interruptible cast went through.
 #
-# Caveat this tool cannot remove: the log does not say whether a player was in
-# RANGE of the caster. "Available" here means off cooldown and alive only, and
-# every finding derived from it says so.
+# range_yd is used with the position data in the log to check whether a player
+# could actually have reached the cast. These values are approximate and are
+# the most likely thing in this file to be wrong -- correct them freely, the
+# finding states which ones it used.
 # ---------------------------------------------------------------------------
 interrupt_abilities:
-  - {name: "Kick",              cooldown_s: 15, spec: "rogue"}
-  - {name: "Pummel",            cooldown_s: 15, spec: "warrior"}
-  - {name: "Rebuke",            cooldown_s: 15, spec: "paladin"}
-  - {name: "Mind Freeze",       cooldown_s: 15, spec: "death knight"}
-  - {name: "Skull Bash",        cooldown_s: 15, spec: "druid"}
-  - {name: "Wind Shear",        cooldown_s: 12, spec: "shaman"}
-  - {name: "Counterspell",      cooldown_s: 24, spec: "mage"}
-  - {name: "Spear Hand Strike", cooldown_s: 15, spec: "monk"}
-  - {name: "Silencing Shot",    cooldown_s: 24, spec: "marksmanship hunter"}
-  - {name: "Solar Beam",        cooldown_s: 60, spec: "balance druid"}
-  - {name: "Disrupting Shout",  cooldown_s: 40, spec: "warrior"}
-  - {name: "Spell Lock",        cooldown_s: 24, spec: "warlock"}
-  - {name: "Optical Blast",     cooldown_s: 24, spec: "warlock"}
-  - {name: "Axe Toss",          cooldown_s: 30, spec: "demonology warlock"}
-  - {name: "Arcane Torrent",    cooldown_s: 120, spec: "blood elf"}
+  - {name: "Kick",              cooldown_s: 15, range_yd: 5, spec: "rogue"}
+  - {name: "Pummel",            cooldown_s: 15, range_yd: 5, spec: "warrior"}
+  - {name: "Rebuke",            cooldown_s: 15, range_yd: 5, spec: "paladin"}
+  - {name: "Mind Freeze",       cooldown_s: 15, range_yd: 15, spec: "death knight"}
+  - {name: "Skull Bash",        cooldown_s: 15, range_yd: 13, spec: "druid"}
+  - {name: "Wind Shear",        cooldown_s: 12, range_yd: 25, spec: "shaman"}
+  - {name: "Counterspell",      cooldown_s: 24, range_yd: 40, spec: "mage"}
+  - {name: "Spear Hand Strike", cooldown_s: 15, range_yd: 5, spec: "monk"}
+  - {name: "Silencing Shot",    cooldown_s: 24, range_yd: 40, spec: "marksmanship hunter"}
+  - {name: "Solar Beam",        cooldown_s: 60, range_yd: 45, spec: "balance druid"}
+  - {name: "Disrupting Shout",  cooldown_s: 40, range_yd: 10, spec: "warrior"}
+  - {name: "Spell Lock",        cooldown_s: 24, range_yd: 40, spec: "warlock"}
+  - {name: "Optical Blast",     cooldown_s: 24, range_yd: 30, spec: "warlock"}
+  - {name: "Axe Toss",          cooldown_s: 30, range_yd: 30, spec: "demonology warlock"}
+  - {name: "Arcane Torrent",    cooldown_s: 120, range_yd: 8, spec: "blood elf"}
+
+# ---------------------------------------------------------------------------
+# Spec signatures: abilities only one specialisation presses.
+#
+# The brief is explicit that two specs must never be blended into one average,
+# and that spec has to be detected per pull because players swap between
+# fights. Role alone does not carry that -- two of these are tank specs and two
+# are healers, and comparing a player against themselves across a spec change
+# compares two different characters.
+#
+# Only abilities that are genuinely spec-exclusive belong here. An ability the
+# whole class has proves nothing.
+# ---------------------------------------------------------------------------
+spec_signatures:
+  - {spec: "blood death knight",     abilities: ["Bone Shield", "Vampiric Blood", "Dancing Rune Weapon"]}
+  - {spec: "frost death knight",     abilities: ["Howling Blast", "Obliterate", "Pillar of Frost"]}
+  - {spec: "unholy death knight",    abilities: ["Summon Gargoyle", "Dark Transformation", "Scourge Strike"]}
+  - {spec: "guardian druid",         abilities: ["Savage Defense", "Frenzied Regeneration", "Thrash"]}
+  - {spec: "restoration druid",      abilities: ["Wild Growth", "Swiftmend", "Efflorescence", "Tranquility"]}
+  - {spec: "balance druid",          abilities: ["Starfall", "Celestial Alignment", "Eclipse (Lunar)", "Astral Storm"]}
+  - {spec: "feral druid",            abilities: ["Ferocious Bite", "Rake", "Tiger's Fury", "Savage Roar"]}
+  - {spec: "beast mastery hunter",   abilities: ["Bestial Wrath", "Focus Fire", "Kill Command"]}
+  - {spec: "marksmanship hunter",    abilities: ["Aimed Shot", "Chimera Shot", "Silencing Shot"]}
+  - {spec: "survival hunter",        abilities: ["Explosive Shot", "Black Arrow"]}
+  - {spec: "arcane mage",            abilities: ["Arcane Blast", "Arcane Barrage", "Arcane Power"]}
+  - {spec: "fire mage",              abilities: ["Pyroblast", "Combustion", "Inferno Blast"]}
+  - {spec: "frost mage",             abilities: ["Frozen Orb", "Icy Veins", "Frostfire Bolt"]}
+  - {spec: "brewmaster monk",        abilities: ["Guard", "Elusive Brew", "Dizzying Haze", "Keg Smash"]}
+  - {spec: "mistweaver monk",        abilities: ["Uplift", "Soothing Mist", "Renewing Mist", "Revival"]}
+  - {spec: "windwalker monk",        abilities: ["Fists of Fury", "Rising Sun Kick", "Energizing Brew"]}
+  - {spec: "protection paladin",     abilities: ["Shield of the Righteous", "Avenger's Shield", "Grand Crusader"]}
+  - {spec: "holy paladin",           abilities: ["Holy Radiance", "Light of Dawn", "Beacon of Light"]}
+  - {spec: "retribution paladin",    abilities: ["Templar's Verdict", "Divine Storm", "Inquisition"]}
+  - {spec: "discipline priest",      abilities: ["Penance", "Power Word: Barrier", "Archangel", "Spirit Shell"]}
+  - {spec: "holy priest",            abilities: ["Circle of Healing", "Divine Hymn", "Lightwell", "Holy Word: Sanctuary"]}
+  - {spec: "shadow priest",          abilities: ["Mind Flay", "Vampiric Touch", "Shadow Word: Death", "Devouring Plague"]}
+  - {spec: "assassination rogue",    abilities: ["Mutilate", "Envenom", "Vendetta"]}
+  - {spec: "combat rogue",           abilities: ["Blade Flurry", "Killing Spree", "Adrenaline Rush", "Revealing Strike"]}
+  - {spec: "subtlety rogue",         abilities: ["Hemorrhage", "Shadow Dance", "Backstab"]}
+  - {spec: "elemental shaman",       abilities: ["Lava Burst", "Elemental Blast", "Earthquake"]}
+  - {spec: "enhancement shaman",     abilities: ["Stormstrike", "Lava Lash", "Feral Spirit"]}
+  - {spec: "restoration shaman",     abilities: ["Chain Heal", "Healing Tide Totem", "Riptide", "Earth Shield"]}
+  - {spec: "affliction warlock",     abilities: ["Malefic Grasp", "Haunt", "Agony", "Soul Swap"]}
+  - {spec: "demonology warlock",     abilities: ["Metamorphosis", "Hand of Gul'dan", "Touch of Chaos"]}
+  - {spec: "destruction warlock",    abilities: ["Chaos Bolt", "Conflagrate", "Immolate", "Incinerate"]}
+  - {spec: "protection warrior",     abilities: ["Shield Slam", "Shield Block", "Shield Barrier", "Devastate"]}
+  - {spec: "arms warrior",           abilities: ["Mortal Strike", "Overpower", "Slam"]}
+  - {spec: "fury warrior",           abilities: ["Bloodthirst", "Raging Blow", "Wild Strike", "Bloodsurge"]}

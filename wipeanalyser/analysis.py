@@ -18,7 +18,9 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
-from .config import Config, BossConfig
+import math
+
+from .config import Config, BossConfig, CooldownDef
 from .logparse import is_player
 from .roles import HEALER, TANK, PlayerRole
 
@@ -75,6 +77,18 @@ class Marker:
     x: float
     y: float
     stale: float       # seconds between the sample and the moment asked for
+
+
+def position_at(
+    pull: "Pull", guid: str, t: float, window: float = SNAPSHOT_WINDOW_S
+) -> Optional[tuple[float, float]]:
+    """Where one unit was at time `t`, from the nearest sample within window."""
+    best = None
+    for sample in pull.positions.get(guid, ()):
+        gap = abs(sample[0] - t)
+        if gap <= window and (best is None or gap < abs(best[0] - t)):
+            best = sample
+    return (best[1], best[2]) if best else None
 
 
 def position_snapshot(
@@ -413,6 +427,10 @@ class MissedInterrupt:
     caster: str
     verified: bool
     available: list[str] = field(default_factory=list)
+    #: players excluded because the caster was beyond their interrupt's reach
+    out_of_range: int = 0
+    #: whether the caster's position was known, so range could be checked
+    range_checked: bool = False
 
 
 def missed_interrupts(
@@ -431,7 +449,7 @@ def missed_interrupts(
     interrupted_at = [(i.t, i.extra_spell_id) for i in pull.interrupts]
 
     # Last use of each player's interrupt, to judge availability.
-    kickers: dict[str, tuple[str, float]] = {}
+    kickers: dict[str, CooldownDef] = {}
     last_used: dict[str, float] = {}
     for c in pull.casts:
         if c.started or not is_player(c.src_guid):
@@ -439,7 +457,7 @@ def missed_interrupts(
         ability = cfg.interrupt_abilities.get(c.spell_name.lower())
         if ability is None:
             continue
-        kickers[c.src_guid] = (ability.name, ability.cooldown_s)
+        kickers[c.src_guid] = ability
         last_used[c.src_guid] = max(last_used.get(c.src_guid, -999.0), c.t)
 
     deaths_by_guid: dict[str, float] = {}
@@ -459,14 +477,28 @@ def missed_interrupts(
             abs(c.t - t) <= 1.5 and sid == c.spell_id for t, sid in interrupted_at
         ):
             continue
+        # Where the caster was, so reach can be checked rather than assumed.
+        caster_pos = position_at(pull, c.src_guid, c.t)
         available = []
-        for guid, (ability, cooldown) in kickers.items():
+        out_of_range = 0
+        for guid, ability in kickers.items():
             died = deaths_by_guid.get(guid)
             if died is not None and died < c.t:
                 continue
             used = last_used.get(guid, -999.0)
-            if c.t - used >= cooldown:
-                available.append(f"{pull.players.get(guid, guid)} ({ability})")
+            if c.t - used < ability.cooldown_s:
+                continue
+            # A melee interrupt on a caster 30 yards away was never an option.
+            # Only exclude on positive evidence: no position data means the
+            # question cannot be answered, so the player stays listed.
+            if caster_pos and ability.range_yd:
+                mine = position_at(pull, guid, c.t)
+                if mine is not None:
+                    gap = math.hypot(mine[0] - caster_pos[0], mine[1] - caster_pos[1])
+                    if gap > ability.range_yd:
+                        out_of_range += 1
+                        continue
+            available.append(f"{pull.players.get(guid, guid)} ({ability.name})")
         out.append(
             MissedInterrupt(
                 t=c.t,
@@ -475,6 +507,8 @@ def missed_interrupts(
                 caster=c.src_name,
                 verified=spec.verified,
                 available=sorted(available)[:5],
+                out_of_range=out_of_range,
+                range_checked=bool(caster_pos),
             )
         )
     return out

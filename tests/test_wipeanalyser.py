@@ -784,6 +784,35 @@ class TestFollowUp(unittest.TestCase):
         self.assertIn("no real change", line)
 
 
+class TestSpecDetection(unittest.TestCase):
+    def test_a_distinctive_kit_identifies_a_spec(self):
+        from wipeanalyser.roles import detect_spec
+
+        sigs = load_config().spec_signatures
+        spec, why = detect_spec(
+            {"shield slam", "shield block", "devastate"}, sigs
+        )
+        self.assertEqual(spec, "protection warrior")
+        self.assertIn("shield slam", why)
+
+    def test_a_tie_declines_to_guess(self):
+        """An unknown spec is honest; a wrong one silently splits a player
+        into two people who are then compared against each other."""
+        from wipeanalyser.roles import detect_spec
+
+        sigs = load_config().spec_signatures
+        # One signature ability from each of two specs.
+        spec, _ = detect_spec({"chain heal", "lava burst"}, sigs)
+        self.assertEqual(spec, "")
+
+    def test_nothing_distinctive_gives_no_spec(self):
+        from wipeanalyser.roles import detect_spec
+
+        spec, _ = detect_spec({"auto attack", "healthstone"},
+                              load_config().spec_signatures)
+        self.assertEqual(spec, "")
+
+
 class TestShareText(unittest.TestCase):
     def _report(self):
         cfg = load_config()

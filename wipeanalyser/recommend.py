@@ -517,10 +517,21 @@ def _interrupts_and_dispels(report: "PullReport") -> list[Finding]:
             evidence.append(
                 f"off cooldown at the time: {', '.join(missed[0].available[:4])}"
             )
-        evidence.append(
-            "availability means alive and off cooldown; the log does not record "
-            "whether they were in range"
-        )
+        if missed[0].range_checked:
+            evidence.append(
+                "available means alive, off cooldown AND within their "
+                "interrupt's reach of the caster, measured from logged positions"
+            )
+            if missed[0].out_of_range:
+                evidence.append(
+                    f"{missed[0].out_of_range} more were off cooldown but too "
+                    f"far away to reach it"
+                )
+        else:
+            evidence.append(
+                "available means alive and off cooldown; the caster's position "
+                "was not in the log, so reach could not be checked"
+            )
         if unverified:
             evidence.append(
                 "this cast is marked unverified in config - confirm it can "

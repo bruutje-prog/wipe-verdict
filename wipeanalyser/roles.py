@@ -87,9 +87,39 @@ class PlayerRole:
     melee_taken: int = 0
     healing_done: int = 0
     damage_done: int = 0
+    #: best-matching specialisation, or "" when nothing distinctive was cast.
+    #: Detected per pull, because players swap spec between fights and
+    #: comparing a player across a spec change compares two characters.
+    spec: str = ""
+    spec_evidence: str = ""
 
 
-def detect_roles(pull: "Pull") -> dict[str, PlayerRole]:
+def detect_spec(
+    names: set[str], signatures: dict[str, frozenset[str]]
+) -> tuple[str, str]:
+    """Best-matching spec for a set of cast ability names.
+
+    Scored by how many spec-exclusive abilities were pressed. A tie or a
+    single weak match returns nothing rather than guessing -- an unknown
+    spec is honest, a wrong one silently splits a player in two.
+    """
+    best, best_hits = "", set()
+    runner_up = 0
+    for spec, sig in signatures.items():
+        hits = names & sig
+        if len(hits) > len(best_hits):
+            runner_up = len(best_hits)
+            best, best_hits = spec, hits
+        elif len(hits) > runner_up:
+            runner_up = len(hits)
+    if not best_hits or len(best_hits) == runner_up:
+        return "", ""
+    return best, ", ".join(sorted(best_hits)[:3])
+
+
+def detect_roles(
+    pull: "Pull", spec_signatures: Optional[dict[str, frozenset[str]]] = None
+) -> dict[str, PlayerRole]:
     """Classify every player in the pull as tank, healer or dps."""
     melee_taken: dict[str, int] = defaultdict(int)
     melee_hits: dict[str, int] = defaultdict(int)
@@ -192,10 +222,15 @@ def detect_roles(pull: "Pull") -> dict[str, PlayerRole]:
                     "- counted as dps"
                 )
 
+        spec, spec_ev = (
+            detect_spec(names, spec_signatures) if spec_signatures else ("", "")
+        )
         roles[guid] = PlayerRole(
             guid=guid,
             name=name,
             role=role,
+            spec=spec,
+            spec_evidence=spec_ev,
             confidence=confidence,
             evidence=evidence,
             melee_taken=melee,
