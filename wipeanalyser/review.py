@@ -228,6 +228,20 @@ def _flag(ev: MechanicEvidence, boss: BossConfig) -> None:
     mech = boss.avoidable.get(ev.spell_id)
 
     if ev.category == "avoidable":
+        # An applications-counted mechanic that applies no aura counts NOTHING.
+        # It is configured, it does damage, and it is silently absent from every
+        # report -- the worst failure available, because it looks handled.
+        if (
+            mech is not None
+            and mech.by_applications
+            and ev.hits
+            and ev.counted_hits == 0
+        ):
+            ev.concerns.append(
+                f"counted by applications, but no aura applications were logged "
+                f"for it -- so it counts ZERO despite {ev.hits} damage events. "
+                f"It needs count: hits, or it is doing nothing at all"
+            )
         if ev.share >= UNAVOIDABLE_SHARE and ev.pulls_seen >= 2:
             ev.concerns.append(
                 f"hits {ev.victims} of {ev.raid} raiders across {ev.pulls_seen} "

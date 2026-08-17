@@ -238,6 +238,23 @@ def _pull(duration: float = 300.0) -> Pull:
     )
 
 
+#: A mechanic that exists only for these tests. Binding behaviour tests to the
+#: shipped config means a legitimate config edit breaks them, which happened
+#: three times -- most recently when Foulness moved off `applications` because
+#: the log showed it applies no aura at all.
+_TICKER = 999001
+
+
+def _synthetic_boss():
+    from wipeanalyser.config import BossConfig, Mechanic
+
+    boss = BossConfig(key="test", encounter_id=1606, display_name="Test Boss")
+    boss.avoidable[_TICKER] = Mechanic(
+        spell_id=_TICKER, name="Ticking Pool", count="applications"
+    )
+    return boss
+
+
 def _melee(t: float, victim: str, amount: int = 500_000, hp=None) -> DamageRecord:
     return DamageRecord(
         t=t, dest_guid=victim, dest_name=victim, src_guid="Creature-1",
@@ -408,31 +425,29 @@ class TestRatesAndWindows(unittest.TestCase):
 class TestAvoidableCounting(unittest.TestCase):
     def test_ticking_mechanics_are_counted_by_application_not_by_tick(self):
         """A pool that ticks 100 times is one mistake, not 100."""
-        cfg = load_config()
-        boss = cfg.boss(1606)
-        self.assertIsNotNone(boss, "Dark Shaman must be configured")
+        boss = _synthetic_boss()
 
         p = _pull()
         # A real player GUID: application counting is restricted to players, so
         # a placeholder id would be filtered out along with the boss's adds.
         p.players = {"Player-4454-0001": "A"}
-        # Foulness (144066) is configured count: applications.
+        # The synthetic mechanic is configured count: applications.
         for i in range(100):
             p.damage_taken.append(
                 DamageRecord(
                     t=float(i), dest_guid="Player-4454-0001", dest_name="A",
-                    src_guid="Creature-1", src_name="Boss", spell_id=144066,
-                    spell_name="Foulness", amount=1000, absorbed=0,
+                    src_guid="Creature-1", src_name="Boss", spell_id=_TICKER,
+                    spell_name="Ticking Pool", amount=1000, absorbed=0,
                     overkill=-1, periodic=True, hp_after=None,
                 )
             )
         p.auras.append(AuraRecord(
             t=0.0, dest_guid="Player-4454-0001", dest_name="A",
-            src_guid="Creature-1", spell_id=144066, spell_name="Foulness",
+            src_guid="Creature-1", spell_id=_TICKER, spell_name="Ticking Pool",
             aura_type="DEBUFF", applied=True,
         ))
         rows = avoidable_table(p, boss, detect_roles(p))
-        mist = next(r for r in rows if r.spell_id == 144066)
+        mist = next(r for r in rows if r.spell_id == _TICKER)
         self.assertEqual(mist.count, 1, "ticks must not be counted as hits")
         self.assertEqual(mist.counted_by, "applications")
         self.assertEqual(mist.damage, 100_000, "damage still totals every tick")
@@ -649,15 +664,14 @@ class TestAvoidableTargets(unittest.TestCase):
         the avoidable table as though they were raiders, which is how the
         impossible "29 of 25 players" reached the config note.
         """
-        cfg = load_config()
-        boss = cfg.boss(1606)
+        boss = _synthetic_boss()
         p = _pull()
         p.players = {"Player-1": "Raider"}
         for guid in ("Player-1", "Creature-0-4448-1136-7803-71591-000002267A"):
             p.auras.append(AuraRecord(
                 t=10.0, dest_guid=guid, dest_name=guid, src_guid="Creature-9",
-                spell_id=144066, spell_name="Foulness", aura_type="DEBUFF",
-                applied=True,
+                spell_id=_TICKER, spell_name="Ticking Pool",
+                aura_type="DEBUFF", applied=True,
             ))
         rows = avoidable_table(p, boss, detect_roles(p))
         self.assertEqual(len(rows), 1, "only the raider counts")

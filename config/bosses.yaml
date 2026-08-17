@@ -57,17 +57,32 @@ bosses:
       # A mitigated 999,999 cannot land near 600k, so this counts only that.
       - {spell_id: 143987, name: "Falling Ash",   count: hits,
          amount_at_least: 600000}
-      - {spell_id: 144334, name: "Iron Tomb",     count: hits}
+      # Lands twice on the same player 10ms apart (Boolur took 450,000 at
+      # 12.70 and again at 12.71), so a raw count reports one tomb as two
+      # mistakes. A one-second gap collapses the pair without merging genuinely
+      # separate tombs, which are a couple of minutes apart.
+      - {spell_id: 144334, name: "Iron Tomb",     count: hits, min_gap_s: 1}
       - {spell_id: 144331, name: "Iron Prison",   count: hits}
       # 54% of its hits land on tanks, four times what an untargeted mechanic
       # would give them. It follows the threat target, so the tanks are not
       # dodging it by choice.
       - {spell_id: 143993, name: "Foul Geyser",   count: hits,
          exempt_roles: [tank]}
-      # Ticking pools. Counted by application, or one mechanic outweighs
-      # everything else in the report.
-      - {spell_id: 144066, name: "Foulness",   count: applications}
-      - {spell_id: 144090, name: "Foul Stream", count: applications}
+      # Both were count: applications on the assumption they were ticking
+      # pools that apply a debuff. They apply NO aura at all -- zero events
+      # across every sample -- so they counted ZERO while still doing 174 and
+      # 95 hits of damage. Configured, damaging, and invisible in every report,
+      # which is worse than being absent because it looks handled.
+      #
+      # Foulness ticks every 1.0s, so hits inside 3s are one stay in the pool.
+      # 40% of its hits land on tanks against ~12% expected, which is the same
+      # threat-following signature as Foul Geyser, so tanks are exempt.
+      - {spell_id: 144066, name: "Foulness",    count: hits, min_gap_s: 3,
+         exempt_roles: [tank]}
+      # Foul Stream is discrete by comparison -- median 34.1s between hits on
+      # one player -- so no collapsing, and at 21% on tanks (under 3x expected)
+      # no exemption either.
+      - {spell_id: 144090, name: "Foul Stream", count: hits}
     # OMITTED - Toxic Mist (144089) is NOT avoidable. The tooltip is explicit:
     # it "injects several players", so it is targeted rather than stood in, and
     # it "pierces all immunities". It was flagged on 21 of 24 raiders every
