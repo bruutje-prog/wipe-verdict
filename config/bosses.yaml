@@ -215,30 +215,74 @@ bosses:
   paragons_of_the_klaxxi:
     encounter_id: 1593
     display_name: "Paragons of the Klaxxi"
-    boss_units: []
-    # THIN DATA: the guild has no heroic Paragons logged. Spell ids do not
-    # change with difficulty so these are valid, but none of it has been seen
-    # at heroic damage levels.
-    seeded_from: "25 Normal, 2026-08-09 (1 pull)"
+    # All nine, named rather than guessed from health: they sit in three tiers
+    # (174M / 152M / 122M) and a health heuristic would have to be tuned to
+    # keep the smallest while dropping a Hungry Kunchong at 19M.
+    boss_units:
+      - "Kil'ruk the Wind-Reaver"
+      - "Korven the Prime"
+      - "Skeer the Bloodseeker"
+      - "Hisek the Swarmkeeper"
+      - "Iyyokuk the Lucid"
+      - "Xaril the Poisoned Mind"
+      - "Kaz'tik the Manipulator"
+      - "Rik'kal the Dissector"
+      - "Ka'roz the Locust"
+
+    # THIN DATA, and unevenly thin, which matters more than the raw pull count.
+    # One 25 Normal kill, 5:00. All nine Paragons appear, but exposure ranges
+    # over two orders of magnitude:
+    #     Ka'roz 233 hits   Rik'kal 91   Hisek 88   Kil'ruk 45   Iyyokuk 41
+    #     Korven 30   Kaz'tik 17   Xaril 6   Skeer 2
+    # So Xaril and Skeer are effectively UNCONFIGURED -- whatever they do on a
+    # long heroic pull is almost certainly missing from this file. Heroic also
+    # runs far longer than five minutes, so every Paragon gets more turns.
+    # Treat a quiet avoidable table on this fight as absence of evidence.
+    seeded_from: "25 Normal, 2026-08-09 (1 pull, 5:00)"
 
     avoidable:
+      # Ka'roz the Locust -- by far the most active in the sample
       - {spell_id: 143735, name: "Caustic Amber",    count: hits}
-      - {spell_id: 144839, name: "Multi-Shot",       count: hits}
-      - {spell_id: 143666, name: "Diminish",         count: hits}
       - {spell_id: 143702, name: "Whirling",         count: hits}
       - {spell_id: 143701, name: "Whirling",         count: hits}
+      # Hisek the Swarmkeeper
+      - {spell_id: 144839, name: "Multi-Shot",       count: hits}
       - {spell_id: 142950, name: "Fire",             count: hits}
+      - {spell_id: 144094, name: "Sonic Resonance",  count: hits}
+      # Kaz'tik the Manipulator
       - {spell_id: 143768, name: "Sonic Projection", count: hits}
+      # Iyyokuk the Lucid
+      - {spell_id: 143666, name: "Diminish",         count: hits}
+      # Rik'kal the Dissector, via his Amber Parasite adds
       - {spell_id: 143362, name: "Feed",             count: hits}
+      # Kil'ruk the Wind-Reaver
+      - {spell_id: 142232, name: "Death from Above", count: hits}
+      # Hungry Kunchong
+      - {spell_id: 142649, name: "Devour",           count: hits}
 
     tank_busters:
+      # Kil'ruk the Wind-Reaver
       - {spell_id: 142930, name: "Razor Sharp Blades",  expect_cooldown: true}
       - {spell_id: 142922, name: "Razor Sharp Blades",  expect_cooldown: true}
-      - {spell_id: 143979, name: "Vicious Assault",     expect_cooldown: true}
-      - {spell_id: 142929, name: "Tenderizing Strikes", expect_cooldown: true}
       - {spell_id: 143941, name: "Mutilate",            expect_cooldown: true}
+      # Korven the Prime -- one ability across several ids
+      - {spell_id: 143979, name: "Vicious Assault",     expect_cooldown: true}
+      - {spell_id: 143980, name: "Vicious Assault",     expect_cooldown: true}
+      - {spell_id: 143981, name: "Vicious Assault",     expect_cooldown: true}
+      - {spell_id: 143982, name: "Vicious Assault",     expect_cooldown: true}
+      - {spell_id: 143984, name: "Vicious Assault",     expect_cooldown: true}
+      - {spell_id: 143985, name: "Vicious Assault",     expect_cooldown: true}
+      # Xaril the Poisoned Mind -- only 6 hits in the sample
+      - {spell_id: 142929, name: "Tenderizing Strikes", expect_cooldown: true}
+      # Rik'kal the Dissector
       - {spell_id: 143278, name: "Genetic Alteration",  expect_cooldown: false}
       - {spell_id: 143339, name: "Injection",           expect_cooldown: false}
+
+    # Skeer the Bloodseeker contributed TWO hits to the whole sample --
+    # Bloodletting (143280) and Hew (143274). Neither is classified here
+    # because two events cannot tell an avoidable mechanic from a tank hit
+    # from unavoidable raid damage. They are the first thing to fix when a
+    # heroic pull exists, or from a tooltip.
 
     interruptible: []
 

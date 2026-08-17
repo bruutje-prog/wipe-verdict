@@ -19,6 +19,12 @@ from .session import Session
 
 def cmd_pulls(args: argparse.Namespace) -> int:
     pulls = read_pulls(args.logfile, encounter_id=args.encounter)
+    # So the boss percentage here matches what `report` shows.
+    cfg = load_config(args.config)
+    for p in pulls:
+        boss = cfg.boss(p.encounter_id)
+        if boss and boss.boss_units:
+            p.configured_bosses = list(boss.boss_units)
     print(f"{len(pulls)} pulls\n")
     for i, p in enumerate(pulls, 1):
         pct = p.best_boss_percent()

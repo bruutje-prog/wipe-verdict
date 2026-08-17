@@ -174,6 +174,10 @@ class Pull:
     )
     #: GUID -> display name for non-player units that have positions
     unit_names: dict[str, str] = field(default_factory=dict)
+    #: boss unit names from config, set by Session when one is available.
+    #: Naming them beats guessing from health, which matters most on a council
+    #: like Paragons where nine units share the encounter.
+    configured_bosses: list[str] = field(default_factory=list)
 
     @property
     def difficulty(self) -> str:
@@ -203,6 +207,12 @@ class Pull:
         """
         if not self.enemy_hp:
             return []
+        # A configured list is authoritative -- the health heuristic keeps any
+        # unit within half the largest, which is right for a two-boss fight and
+        # guesswork for a nine-boss council with three different health tiers.
+        named = [n for n in self.configured_bosses if n in self.enemy_hp]
+        if named:
+            return sorted(named)
         biggest = max(v[1] for v in self.enemy_hp.values())
         if biggest <= 0:
             return []

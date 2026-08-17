@@ -210,6 +210,10 @@ class Session:
         """Analyse a finished pull in the context of the session so far."""
         cfg = self.config
         boss = cfg.boss(pull.encounter_id)
+        if boss and boss.boss_units:
+            # Let the config name the encounter's units before anything
+            # asks how close the raid got.
+            pull.configured_bosses = list(boss.boss_units)
         roles = detect_roles(pull)
 
         report = PullReport(
