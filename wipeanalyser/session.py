@@ -115,6 +115,18 @@ class RepeatedFailure:
     pulls_seen: int
     players: list[str]
     total_hits: int
+    #: everyone who raided in the pulls this covers.
+    #:
+    #: `players` accumulates across several pulls, so with roster swaps it can
+    #: exceed the size of any single one -- six Blackfuse pulls produced
+    #: "29/25". Comparing an accumulated count against one pull's raid size
+    #: compares two different populations, so the denominator has to accumulate
+    #: over exactly the same pulls.
+    roster: int = 0
+
+    @property
+    def share(self) -> float:
+        return len(self.players) / self.roster if self.roster else 0.0
 
     @property
     def raid_wide(self) -> bool:
@@ -269,9 +281,16 @@ class Session:
             if r.pull.difficulty_id == report.pull.difficulty_id
         ]
         by_mech: dict[int, dict] = defaultdict(
-            lambda: {"name": "", "pulls": set(), "players": set(), "hits": 0}
+            lambda: {
+                "name": "", "pulls": set(), "players": set(), "hits": 0,
+                "roster": set(),
+            }
         )
         for r in history:
+            for spell_id in {row.spell_id for row in r.avoidable}:
+                # Everyone who raided in a pull this mechanic occurred in --
+                # the population the hit count is actually drawn from.
+                by_mech[spell_id]["roster"].update(r.pull.players.values())
             for row in r.avoidable:
                 slot = by_mech[row.spell_id]
                 slot["name"] = row.mechanic
@@ -286,6 +305,7 @@ class Session:
                 pulls_seen=len(slot["pulls"]),
                 players=sorted(slot["players"]),
                 total_hits=slot["hits"],
+                roster=len(slot["roster"]),
             )
             for spell_id, slot in by_mech.items()
         ]

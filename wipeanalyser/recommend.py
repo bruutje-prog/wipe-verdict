@@ -151,7 +151,6 @@ def _root_cause(report: "PullReport") -> list[Finding]:
 
 def _repeated(report: "PullReport") -> list[Finding]:
     out: list[Finding] = []
-    raid_size = max(len(report.pull.players), 1)
     suspect: list[str] = []
 
     for rep in report.repeated:
@@ -161,8 +160,13 @@ def _repeated(report: "PullReport") -> list[Finding]:
         # If practically everyone is hit in every pull, the likeliest
         # explanation is that the mechanic is not avoidable and the config is
         # wrong -- not that 24 raiders simultaneously cannot move.
-        if len(rep.players) / raid_size >= 0.8:
-            suspect.append(f"{rep.mechanic} ({len(rep.players)}/{raid_size})")
+        #
+        # Both halves of this ratio accumulate over the same pulls. Measuring
+        # an accumulated player count against ONE pull's raid size produced
+        # "29/25", which is not a possible fraction and made the note look
+        # broken even where its point was right.
+        if rep.share >= 0.8:
+            suspect.append(f"{rep.mechanic} ({len(rep.players)}/{rep.roster})")
             continue
 
         if len(out) >= 2:

@@ -169,6 +169,12 @@ def avoidable_table(
         mech = boss.is_avoidable(a.spell_id)
         if mech is None or not mech.by_applications or not a.applied:
             continue
+        # Auras are recorded for every unit, not just the raid. Ground fire
+        # ticks on the boss's own adds too, and counting those listed four
+        # Automated Shredders in the avoidable table as though they were
+        # raiders -- which is how "29 of 25 players" happened.
+        if not is_player(a.dest_guid):
+            continue
         hits[(a.dest_guid, a.spell_id)] += 1
 
     deaths_to: dict[tuple[str, int], int] = defaultdict(int)
@@ -506,6 +512,10 @@ def missed_dispels(
     out: list[MissedDispel] = []
     for a in pull.auras:
         if a.spell_id not in known or a.aura_type != "DEBUFF":
+            continue
+        # Same trap as the avoidable table: a purge on an enemy is not a debuff
+        # the raid failed to remove from one of its own.
+        if not is_player(a.dest_guid):
             continue
         key = (a.dest_guid, a.spell_id)
         if a.applied:
