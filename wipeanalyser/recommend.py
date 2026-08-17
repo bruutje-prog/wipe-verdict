@@ -12,7 +12,7 @@ the lessons in this codebase were found in the first place.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from .deaths import (
     SIG_LOOSE_BOSS,
@@ -36,6 +36,41 @@ if TYPE_CHECKING:  # pragma: no cover
     from .session import PullReport, Session
 
 
+def _follow_up(report: "PullReport", session: "Session", spell_id: int) -> Optional[str]:
+    """Whether the last pull was told about this mechanic, and what changed.
+
+    The ranking claims to order by estimated impact on killing the boss but
+    never checks whether anything it asked for happened. This closes that loop
+    with the one measurement available: did the rate move.
+    """
+    previous = session.previous(report.pull)
+    if not previous:
+        return None
+    last = previous[-1]
+    topic = f"mechanic:{spell_id}"
+    if not any(f.topic == topic for f in last.findings):
+        return None
+    before = last.mechanic_rate(spell_id)
+    now = report.mechanic_rate(spell_id)
+    if before is None:
+        return None
+    if now is None:
+        return (
+            f"raised after the last pull, and it did not happen at all this "
+            f"time (was {before:.1f}/min)"
+        )
+    if now < before * 0.7:
+        verdict_word = "better"
+    elif now > before * 1.3:
+        verdict_word = "worse"
+    else:
+        verdict_word = "no real change"
+    return (
+        f"raised after the last pull: {before:.1f}/min then, {now:.1f}/min now "
+        f"({verdict_word})"
+    )
+
+
 def build_findings(
     report: "PullReport", session: "Session"
 ) -> tuple[list[Finding], list[Finding]]:
@@ -47,7 +82,7 @@ def build_findings(
     """
     out: list[Finding] = []
     out.extend(_root_cause(report))
-    out.extend(_repeated(report))
+    out.extend(_repeated(report, session))
     out.extend(_early_deaths(report, session))
     out.extend(_cooldowns(report, session))
     out.extend(_shared(report))
@@ -149,7 +184,7 @@ def _root_cause(report: "PullReport") -> list[Finding]:
     ]
 
 
-def _repeated(report: "PullReport") -> list[Finding]:
+def _repeated(report: "PullReport", session: "Session") -> list[Finding]:
     out: list[Finding] = []
     suspect: list[str] = []
 
@@ -184,13 +219,18 @@ def _repeated(report: "PullReport") -> list[Finding]:
                     + (" and others" if len(rep.players) > 6 else ""),
                     "several players over several pulls: an assignment problem, "
                     "not individual error",
-                ],
+                ] + (
+                    [followed]
+                    if (followed := _follow_up(report, session, rep.spell_id))
+                    else []
+                ),
                 method="avoidable hits per player per pull, counted from the "
                        "mechanics config",
                 rejected="blaming the individuals hit, which does not fix a "
                          "raid-wide positioning failure",
                 scope="raid-wide",
                 players=rep.players,
+                topic=f"mechanic:{rep.spell_id}",
                 config_ref=f"bosses.yaml -> avoidable -> {rep.mechanic}",
             )
         )

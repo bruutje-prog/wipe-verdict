@@ -706,6 +706,84 @@ class TestAmountThreshold(unittest.TestCase):
         self.assertEqual(row.damage, 680_000, "damage must exclude filtered hits")
 
 
+class TestFollowUp(unittest.TestCase):
+    """Did the advice from the last pull change anything."""
+
+    def _pull_with(self, hits_per_player: int, duration: float = 300.0):
+        p = _pull(duration)
+        p.players = {f"Player-{i}": f"P{i}" for i in range(25)}
+        t = 10.0
+        for i in range(4):                    # 4 of 25, so not a config note
+            for _ in range(hits_per_player):
+                p.damage_taken.append(
+                    DamageRecord(
+                        t=t, dest_guid=f"Player-{i}", dest_name=f"P{i}",
+                        src_guid="Creature-1", src_name="Boss",
+                        spell_id=144334, spell_name="Iron Tomb",
+                        amount=300_000, absorbed=0, overkill=-1,
+                        periodic=False, hp_after=0.6,
+                    )
+                )
+                t += 7.0
+        return p
+
+    def _follow_line(self, report):
+        for f in report.findings:
+            for e in f.evidence:
+                if "raised after the last pull" in e:
+                    return e
+        return None
+
+    # A repeated-failure finding needs TWO pulls before it is raised at all,
+    # and the follow-up needs it raised in the pull before this one -- so the
+    # earliest it can appear is the third pull. That matches the real logs,
+    # where Death From Above was raised on Blackfuse pull 3 and followed up on
+    # pulls 4 and 5.
+
+    def test_improvement_is_reported_against_the_previous_pull(self):
+        s = Session(load_config())
+        s.add(self._pull_with(4))
+        s.add(self._pull_with(4))          # finding raised here
+        third = s.add(self._pull_with(1))  # followed up here
+        line = self._follow_line(third)
+        self.assertIsNotNone(line, "a repeated mechanic must be followed up")
+        self.assertIn("better", line)
+
+    def test_a_mechanic_that_stopped_entirely_is_reported(self):
+        s = Session(load_config())
+        s.add(self._pull_with(4))
+        s.add(self._pull_with(4))
+        clean = _pull(300.0)
+        clean.players = {f"Player-{i}": f"P{i}" for i in range(25)}
+        third = s.add(clean)
+        line = self._follow_line(third)
+        self.assertIsNotNone(line)
+        self.assertIn("did not happen at all", line)
+
+    def test_no_follow_up_before_the_finding_has_been_raised(self):
+        s = Session(load_config())
+        first = s.add(self._pull_with(4))
+        self.assertIsNone(self._follow_line(first))
+        second = s.add(self._pull_with(4))
+        self.assertIsNone(
+            self._follow_line(second),
+            "the finding is only raised on this pull, so there is nothing to "
+            "follow up yet",
+        )
+
+    def test_rate_is_per_minute_so_pull_length_does_not_decide_it(self):
+        """A pull lasting twice as long collects twice the hits without
+        anybody playing worse."""
+        s = Session(load_config())
+        s.add(self._pull_with(3, duration=300.0))
+        s.add(self._pull_with(3, duration=300.0))
+        # Same rate, double the length: twice the raw hits, no real change.
+        third = s.add(self._pull_with(6, duration=600.0))
+        line = self._follow_line(third)
+        self.assertIsNotNone(line)
+        self.assertIn("no real change", line)
+
+
 class TestShareText(unittest.TestCase):
     def _report(self):
         cfg = load_config()

@@ -159,6 +159,20 @@ class PullReport:
     def avoidable_hits(self) -> int:
         return sum(r.count for r in self.avoidable)
 
+    def mechanic_rate(self, spell_id: int) -> Optional[float]:
+        """Hits per minute for one mechanic, or None if it did not occur.
+
+        A RATE, because pulls differ in length: a pull that lasted twice as
+        long collects twice the hits without anybody playing worse.
+        """
+        hits = sum(r.count for r in self.avoidable if r.spell_id == spell_id)
+        minutes = (self.pull.duration or 0) / 60.0
+        if not minutes or not any(
+            r.spell_id == spell_id for r in self.avoidable
+        ):
+            return None
+        return hits / minutes
+
     def is_damage_check(self) -> bool:
         """Whether the pull failed as a damage/healing check rather than survival.
 

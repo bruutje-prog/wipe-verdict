@@ -107,6 +107,10 @@ class Finding:
     config_ref: Optional[str] = None
     #: subject the metric is applied to, checked against the absorb rule
     subject: Optional[str] = None
+    #: stable identity for "did this advice work" -- e.g. "mechanic:144017".
+    #: Without it the tool can rank by estimated impact forever and never once
+    #: check whether anything it asked for actually happened.
+    topic: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.subject and self.method:
