@@ -14,6 +14,7 @@ from pathlib import Path
 from .config import load_config
 from .pulls import read_pulls
 from .render import render_report
+from .review import render_review
 from .session import Session
 
 
@@ -60,6 +61,30 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_review(args: argparse.Namespace) -> int:
+    """Audit the mechanic config for a boss against the logs."""
+    cfg = load_config(args.config)
+    pulls = [
+        p for p in read_pulls(args.logfile, encounter_id=args.encounter)
+        if p.duration >= args.min_duration
+    ]
+    if not pulls:
+        print("no pulls of usable length")
+        return 1
+    boss = cfg.boss(pulls[0].encounter_id)
+    if boss is None:
+        print(
+            f"{pulls[0].boss} (encounter {pulls[0].encounter_id}) is not "
+            f"configured. Seed it with tools/mine_spells.py first."
+        )
+        return 1
+    for p in pulls:
+        if boss.boss_units:
+            p.configured_bosses = list(boss.boss_units)
+    print(render_review(pulls, boss))
+    return 0
+
+
 def cmd_live(args: argparse.Namespace) -> int:
     from .server import serve
 
@@ -89,6 +114,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="skip resets and mis-pulls shorter than this",
     )
     p.set_defaults(func=cmd_report)
+
+    p = sub.add_parser(
+        "review", help="audit the mechanic config for a boss against the logs"
+    )
+    p.add_argument("logfile")
+    p.add_argument("--encounter", type=int, default=None)
+    p.add_argument("--min-duration", type=float, default=30.0)
+    p.set_defaults(func=cmd_review)
 
     p = sub.add_parser("live", help="tail the live log and serve the dashboard")
     p.add_argument(
