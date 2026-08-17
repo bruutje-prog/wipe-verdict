@@ -78,6 +78,12 @@ bosses:
       - {spell_id: 144215, name: "Froststorm Strike", expect_cooldown: true}
       - {spell_id: 144214, name: "Froststorm Bolt",   expect_cooldown: false}
 
+    # Falling Ash is summoned and falls over 15 seconds (tooltip), so the cast
+    # leads the damage by a long way -- exactly the case a derived peak cannot
+    # measure lateness against.
+    damage_windows:
+      - {name: "Falling Ash", trigger_spell_id: 143973, lead_s: 13, duration_s: 8}
+
     interruptible:
       - {spell_id: 144214, name: "Froststorm Bolt", verified: false}
 
@@ -109,6 +115,11 @@ bosses:
       - {spell_id: 143780, name: "Acid Breath",   expect_cooldown: true}
       - {spell_id: 143426, name: "Fearsome Roar", expect_cooldown: false}
       - {spell_id: 144067, name: "Blood Frenzy",  expect_cooldown: true}
+
+    # Deafening Screech is 525k to every enemy on reaching full energy, and it
+    # gets faster each time. The cast is the anchor.
+    damage_windows:
+      - {name: "Deafening Screech", trigger_spell_id: 143343, lead_s: 0, duration_s: 6}
 
     # No interruptible casts asserted. Thok casts Deafening Screech 226 times a
     # pull and Fixate 77 times, but nothing in the log shows the raid
@@ -399,6 +410,11 @@ bosses:
       - {spell_id: 145195, name: "Empowered Gripping Despair", expect_cooldown: true}
       - {spell_id: 144582, name: "Hamstring",                  expect_cooldown: false}
 
+    # Annihilate follows an interrupted Absorb Power (tooltip), so the cast is
+    # the only reliable anchor for it.
+    damage_windows:
+      - {name: "Annihilate", trigger_spell_id: 144969, lead_s: 0, duration_s: 8}
+
     interruptible: []
 
   siegecrafter_blackfuse:
@@ -447,4 +463,11 @@ bosses:
     # CANNOT be interrupted, so the tool was telling the raid to set a rotation
     # for something impossible. Removed -- do not re-add from cast-bar evidence
     # alone. This is why interruptible entries start life as verified: false.
+    # Overload is scheduled raid damage the raid leader confirmed needs a
+    # cooldown, and the Automated Shredder's cast is the anchor -- so lateness
+    # is measured against the cast rather than against wherever the damage
+    # happened to peak.
+    damage_windows:
+      - {name: "Overload", trigger_spell_id: 145444, lead_s: 0, duration_s: 10}
+
     interruptible: []

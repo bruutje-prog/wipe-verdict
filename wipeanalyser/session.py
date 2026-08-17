@@ -19,6 +19,8 @@ from .analysis import (
     DamageWindow,
     MissedDispel,
     MissedInterrupt,
+    BattleRez,
+    FailureMode,
     SharedBurst,
     SoakReport,
     absorb_usage,
@@ -28,6 +30,9 @@ from .analysis import (
     dispellable_ids,
     missed_dispels,
     missed_interrupts,
+    battle_rezzes,
+    failure_mode,
+    scheduled_windows,
     shared_bursts,
     soak_report,
 )
@@ -155,6 +160,8 @@ class PullReport:
     absorbs: list[AbsorbUsage] = field(default_factory=list)
     shared: list[SharedBurst] = field(default_factory=list)
     soaks: list[SoakReport] = field(default_factory=list)
+    rezzes: list[BattleRez] = field(default_factory=list)
+    failure: Optional[FailureMode] = None
     delta: Optional[PullDelta] = None
     repeated: list[RepeatedFailure] = field(default_factory=list)
     #: the boss's mechanic config, so findings can check what is actually
@@ -183,17 +190,15 @@ class PullReport:
         return hits / minutes
 
     def is_damage_check(self) -> bool:
-        """Whether the pull failed as a damage/healing check rather than survival.
+        """Kept for callers that only care about the throughput case."""
+        from .analysis import MODE_DAMAGE
 
-        Throughput advice is ranked last and only applies here, because telling
-        a raid to press harder after a survival failure kills them faster.
-        """
-        if not self.pull.is_wipe:
-            return False
-        pct = self.pull.best_boss_percent()
-        if pct is None:
-            return False
-        return pct > 20.0 and len(self.verdict.blameable) <= 2
+        return self.failure is not None and self.failure.mode == MODE_DAMAGE
+
+    def is_healing_check(self) -> bool:
+        from .analysis import MODE_HEALING
+
+        return self.failure is not None and self.failure.mode == MODE_HEALING
 
 
 class Session:
@@ -248,9 +253,17 @@ class Session:
             absorbs=absorb_usage(pull, cfg, roles),
             shared=shared_bursts(pull, boss),
             soaks=soak_report(pull, boss),
+            rezzes=battle_rezzes(pull),
             boss=boss,
         )
-        report.windows = cooldown_coverage(pull, cfg, damage_windows(pull))
+        # Scheduled windows when the boss is configured for them, so lateness
+        # is measured against a known cast; derived peaks otherwise.
+        windows = scheduled_windows(pull, boss) or damage_windows(pull)
+        report.windows = cooldown_coverage(pull, cfg, windows)
+        report.failure = failure_mode(
+            pull, boss, len(report.verdict.blameable),
+            pull.best_boss_percent(),
+        )
 
         known = dispellable_ids(self.pulls + [pull])
         report.dispels = missed_dispels(pull, known)

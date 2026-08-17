@@ -88,6 +88,7 @@ def build_findings(
     out.extend(_shared(report))
     out.extend(_soaks(report))
     out.extend(_interrupts_and_dispels(report))
+    out.extend(_rezzes(report))
     out.extend(_throughput(report))
 
     notes = [f for f in out if f.rank_class == RANK_CONFIG]
@@ -316,7 +317,7 @@ def _cooldowns(report: "PullReport", session: "Session") -> list[Finding]:
                 rank_class=RANK_COOLDOWN,
                 score=float(w.damage) / 1_000_000.0,
                 action=(
-                    f"Put a raid cooldown on the damage spike at "
+                    f"Put a raid cooldown on {w.label} at "
                     f"{report.pull.fmt(w.start)}.{late}"
                 ),
                 evidence=[
@@ -325,10 +326,19 @@ def _cooldowns(report: "PullReport", session: "Session") -> list[Finding]:
                     f"{len([x for x in report.windows if x.covered])} of "
                     f"{len(report.windows)} damage windows were covered",
                 ],
-                method="damage windows derived from the pull's own raid-damage "
-                       "peaks, matched against raid cooldown casts",
-                rejected="counting cooldown casts, which cannot tell a cooldown "
-                         "used on time from one used late",
+                method=(
+                    "windows anchored to the boss cast that opens them"
+                    if w.scheduled else
+                    "damage windows derived from the pull's own raid-damage peaks"
+                ) + ", matched against raid cooldown casts",
+                rejected=(
+                    "counting cooldown casts, which cannot tell a cooldown used "
+                    "on time from one used late"
+                    if w.scheduled else
+                    "counting cooldown casts; note this window is derived from "
+                    "where damage landed, so lateness against it is weaker "
+                    "evidence than against a scheduled cast"
+                ),
                 scope="raid-wide",
                 config_ref="mechanics.yaml -> raid_cooldowns",
             )
@@ -576,25 +586,88 @@ def _interrupts_and_dispels(report: "PullReport") -> list[Finding]:
 
 
 def _throughput(report: "PullReport") -> list[Finding]:
-    """Only when the pull was a damage or healing check, never after a wipe."""
-    if not report.is_damage_check():
+    """Only when the pull was a damage or healing check, never after a wipe.
+
+    The two need opposite responses. Telling a raid to press harder after a
+    survival failure kills them faster; telling them to stand better when
+    healing was simply outpaced blames the wrong people.
+    """
+    failure = report.failure
+    if failure is None:
         return []
-    pct = report.pull.best_boss_percent()
+
+    if report.is_damage_check():
+        pct = report.pull.best_boss_percent()
+        return [
+            Finding(
+                rank_class=RANK_THROUGHPUT,
+                score=1.0,
+                action=(
+                    f"This was a damage check, not a survival failure - the boss "
+                    f"finished at {pct:.1f}% with few deaths."
+                ),
+                evidence=failure.evidence + [
+                    "throughput is ranked last deliberately; it only applies "
+                    "when the raid survived and still did not finish the boss",
+                ],
+                method="boss health at wipe against blameable death count",
+                scope="raid-wide",
+            )
+        ]
+
+    if report.is_healing_check():
+        uncovered = [w for w in report.windows if not w.covered]
+        extra = (
+            f" {len(uncovered)} of {len(report.windows)} damage windows had no "
+            f"raid cooldown on them."
+            if report.windows else ""
+        )
+        return [
+            Finding(
+                rank_class=RANK_THROUGHPUT,
+                score=2.0,
+                action=(
+                    f"This was a healing check - the raid went down together to "
+                    f"damage nobody could dodge.{extra}"
+                ),
+                evidence=failure.evidence + [
+                    "the lever here is raid and healer cooldowns, not "
+                    "positioning: telling people to stand better does nothing "
+                    "about damage the config does not call avoidable",
+                ],
+                method="share of the raid dying inside one window, against how "
+                       "many of those killing blows are avoidable mechanics",
+                rejected="healing done, which rises with damage taken and so "
+                         "looks best on exactly the pulls that went worst",
+                scope="raid-wide",
+            )
+        ]
+    return []
+
+
+def _rezzes(report: "PullReport") -> list[Finding]:
+    """A battle rez spent on somebody who dies again bought nothing."""
+    wasted = [r for r in report.rezzes if r.wasted]
+    if not wasted:
+        return []
+    worst = min(wasted, key=lambda r: r.survived_s or 0)
     return [
         Finding(
-            rank_class=RANK_THROUGHPUT,
-            score=1.0,
+            rank_class=RANK_COOLDOWN,
+            score=float(len(wasted)) * 3.0,
             action=(
-                f"This was a damage check, not a survival failure - the boss "
-                f"finished at {pct:.1f}% with few deaths."
+                f"{len(wasted)} of {len(report.rezzes)} battle rezzes were spent "
+                f"on someone who died again straight away - hold them until the "
+                f"damage that killed them has passed."
             ),
             evidence=[
-                f"{len(report.verdict.blameable)} blameable deaths in "
-                f"{report.pull.fmt(report.pull.duration)}",
-                "throughput is ranked last deliberately; it only applies when "
-                "the raid survived and still did not finish the boss",
+                f"{worst.name} was brought back at "
+                f"{report.pull.fmt(worst.t)} by {worst.caster} and died "
+                f"{worst.survived_s:.0f}s later",
+                "charges are scarce on progression, so the question is what "
+                "each one bought, not how many were used",
             ],
-            method="boss health at wipe against blameable death count",
+            method="time from resurrection to the next death of the same player",
             scope="raid-wide",
         )
     ]

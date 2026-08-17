@@ -92,6 +92,23 @@ class TankBuster:
 
 
 @dataclass(slots=True)
+class ScheduledWindow:
+    """A damage window opened by a boss cast.
+
+    Derived windows -- the pull's own raid-damage peaks -- can say a spike went
+    uncovered, but not that a cooldown was late, because the peak IS wherever
+    the damage landed. Anchoring to the cast that causes it makes "used 3
+    seconds late" a real measurement against a known event.
+    """
+
+    name: str
+    trigger_spell_id: int
+    #: seconds between the trigger and the damage actually starting
+    lead_s: float = 0.0
+    duration_s: float = 8.0
+
+
+@dataclass(slots=True)
 class Interruptible:
     spell_id: int
     name: str
@@ -109,6 +126,7 @@ class BossConfig:
     soaks: dict[int, SoakMechanic] = field(default_factory=dict)
     tank_busters: dict[int, TankBuster] = field(default_factory=dict)
     interruptible: dict[int, Interruptible] = field(default_factory=dict)
+    damage_windows: list[ScheduledWindow] = field(default_factory=list)
     seeded_from: str = ""
 
     def is_avoidable(self, spell_id: int) -> Optional[Mechanic]:
@@ -235,6 +253,15 @@ def load_config(config_dir: Optional[Path | str] = None) -> Config:
                     expect_cooldown=bool(row.get("expect_cooldown", False)),
                 )
                 boss.tank_busters[tb.spell_id] = tb
+            for row in body.get("damage_windows") or []:
+                boss.damage_windows.append(
+                    ScheduledWindow(
+                        name=row.get("name", "?"),
+                        trigger_spell_id=_as_int(row.get("trigger_spell_id")),
+                        lead_s=float(row.get("lead_s", 0.0)),
+                        duration_s=float(row.get("duration_s", 8.0)),
+                    )
+                )
             for row in body.get("interruptible") or []:
                 it = Interruptible(
                     spell_id=_as_int(row.get("spell_id")),

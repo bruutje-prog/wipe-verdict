@@ -116,6 +116,15 @@ class DeathRecord:
 
 
 @dataclass(slots=True)
+class ResurrectRecord:
+    t: float
+    guid: str            # who was brought back
+    name: str
+    caster: str          # who spent the charge
+    spell_name: str
+
+
+@dataclass(slots=True)
 class InterruptRecord:
     t: float
     src_guid: str
@@ -157,7 +166,7 @@ class Pull:
     deaths: list[DeathRecord] = field(default_factory=list)
     interrupts: list[InterruptRecord] = field(default_factory=list)
     dispels: list[DispelRecord] = field(default_factory=list)
-    resurrects: list[DeathRecord] = field(default_factory=list)
+    resurrects: list[ResurrectRecord] = field(default_factory=list)
 
     #: player GUID -> display name (short, realm stripped)
     players: dict[str, str] = field(default_factory=dict)
@@ -537,7 +546,13 @@ class PullSegmenter:
 
         if etype == "SPELL_RESURRECT":
             pull.resurrects.append(
-                DeathRecord(t=t, guid=ev.dest_guid, name=short_name(ev.dest_name))
+                ResurrectRecord(
+                    t=t,
+                    guid=ev.dest_guid,
+                    name=short_name(ev.dest_name),
+                    caster=short_name(ev.src_name),
+                    spell_name=ev.spell_name,
+                )
             )
 
 

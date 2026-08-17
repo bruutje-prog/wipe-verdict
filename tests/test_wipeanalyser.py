@@ -13,6 +13,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from typing import Optional
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -782,6 +783,145 @@ class TestFollowUp(unittest.TestCase):
         line = self._follow_line(third)
         self.assertIsNotNone(line)
         self.assertIn("no real change", line)
+
+
+class TestScheduledWindows(unittest.TestCase):
+    def _pull_with_casts(self, times, spell_id=145444):
+        p = _pull(300.0)
+        p.encounter_id = 1601
+        p.boss = "Siegecrafter Blackfuse"
+        p.players = {"Player-1": "Raider"}
+        for t in times:
+            p.casts.append(CastRecord(
+                t=t, src_guid="Creature-1", src_name="Automated Shredder",
+                dest_guid="", spell_id=spell_id, spell_name="Overload",
+                started=False, hostile=True,
+            ))
+        return p
+
+    def test_a_window_opens_on_the_boss_cast(self):
+        from wipeanalyser.analysis import scheduled_windows
+
+        boss = load_config().boss(1601)
+        self.assertTrue(boss.damage_windows, "Blackfuse must have a window")
+        w = scheduled_windows(self._pull_with_casts([60.0]), boss)
+        self.assertEqual(len(w), 1)
+        self.assertEqual(w[0].start, 60.0)
+        self.assertTrue(w[0].scheduled)
+        self.assertEqual(w[0].name, "Overload")
+
+    def test_simultaneous_casters_are_one_window(self):
+        """Several adds casting the same thing at once is one window, not four,
+        or a single mechanic reports as four uncovered spikes."""
+        from wipeanalyser.analysis import scheduled_windows
+
+        boss = load_config().boss(1601)
+        w = scheduled_windows(self._pull_with_casts([60.0, 60.4, 61.0]), boss)
+        self.assertEqual(len(w), 1)
+
+    def test_a_players_cast_never_opens_a_window(self):
+        from wipeanalyser.analysis import scheduled_windows
+
+        boss = load_config().boss(1601)
+        p = self._pull_with_casts([])
+        p.casts.append(CastRecord(
+            t=60.0, src_guid="Player-1", src_name="Raider", dest_guid="",
+            spell_id=145444, spell_name="Overload", started=False,
+            hostile=False,
+        ))
+        self.assertEqual(scheduled_windows(p, boss), [])
+
+    def test_lead_time_offsets_the_window(self):
+        """Falling Ash is cast, then lands 15s later; the window is the impact,
+        not the cast."""
+        from wipeanalyser.analysis import scheduled_windows
+
+        boss = load_config().boss(1606)
+        p = self._pull_with_casts([100.0], spell_id=143973)
+        p.encounter_id = 1606
+        w = scheduled_windows(p, boss)
+        self.assertEqual(len(w), 1)
+        self.assertGreater(w[0].start, 100.0, "lead_s must delay the window")
+
+
+class TestFailureMode(unittest.TestCase):
+    def _collapse_pull(self, avoidable_killer: bool):
+        p = _pull(200.0)
+        p.players = {f"Player-{i}": f"P{i}" for i in range(20)}
+        spell = 144017 if avoidable_killer else 999999   # Toxic Storm vs unknown
+        for i in range(12):                              # 12 of 20 together
+            t = 150.0 + i * 0.5
+            p.damage_taken.append(
+                DamageRecord(
+                    t=t - 0.2, dest_guid=f"Player-{i}", dest_name=f"P{i}",
+                    src_guid="Creature-1", src_name="Boss", spell_id=spell,
+                    spell_name="Something", amount=400_000, absorbed=0,
+                    overkill=1, periodic=False, hp_after=0.1,
+                )
+            )
+            p.deaths.append(DeathRecord(t=t, guid=f"Player-{i}", name=f"P{i}"))
+        return p
+
+    def test_a_collapse_to_unavoidable_damage_is_a_healing_check(self):
+        report = Session(load_config()).add(self._collapse_pull(False))
+        self.assertTrue(report.is_healing_check())
+        self.assertFalse(report.is_damage_check())
+
+    def test_a_collapse_to_avoidable_damage_is_not_a_healing_check(self):
+        """Everyone standing in the same pool is a positioning failure, and
+        telling the healers to press harder would be the wrong lever."""
+        report = Session(load_config()).add(self._collapse_pull(True))
+        self.assertFalse(report.is_healing_check())
+
+    def test_a_kill_has_no_failure_mode(self):
+        p = self._collapse_pull(False)
+        p.success = True
+        report = Session(load_config()).add(p)
+        self.assertFalse(report.is_healing_check())
+        self.assertFalse(report.is_damage_check())
+
+
+class TestBattleRez(unittest.TestCase):
+    def _pull_with_rez(self, died_again_after: Optional[float]):
+        from wipeanalyser.pulls import ResurrectRecord
+
+        p = _pull(300.0)
+        p.players = {"Player-1": "Raider"}
+        p.deaths.append(DeathRecord(t=60.0, guid="Player-1", name="Raider"))
+        p.resurrects.append(ResurrectRecord(
+            t=70.0, guid="Player-1", name="Raider", caster="Healer",
+            spell_name="Rebirth",
+        ))
+        if died_again_after is not None:
+            p.deaths.append(
+                DeathRecord(t=70.0 + died_again_after, guid="Player-1",
+                            name="Raider")
+            )
+        return p
+
+    def test_a_rez_followed_by_a_quick_death_is_wasted(self):
+        from wipeanalyser.analysis import battle_rezzes
+
+        rez = battle_rezzes(self._pull_with_rez(5.0))
+        self.assertEqual(len(rez), 1)
+        self.assertTrue(rez[0].wasted)
+        self.assertEqual(rez[0].caster, "Healer")
+
+    def test_a_rez_that_stuck_is_not_wasted(self):
+        from wipeanalyser.analysis import battle_rezzes
+
+        self.assertFalse(battle_rezzes(self._pull_with_rez(120.0))[0].wasted)
+
+    def test_a_rez_with_no_later_death_is_not_wasted(self):
+        from wipeanalyser.analysis import battle_rezzes
+
+        self.assertFalse(battle_rezzes(self._pull_with_rez(None))[0].wasted)
+
+    def test_wasted_rezzes_produce_a_finding(self):
+        report = Session(load_config()).add(self._pull_with_rez(5.0))
+        self.assertTrue(
+            [f for f in report.findings if "battle rez" in f.action.lower()]
+        )
 
 
 class TestSpecDetection(unittest.TestCase):

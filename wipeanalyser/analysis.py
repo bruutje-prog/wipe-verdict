@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Optional
 
 import math
 
-from .config import Config, BossConfig, CooldownDef
+from .config import Config, BossConfig, CooldownDef, ScheduledWindow
 from .logparse import is_player
 from .roles import HEALER, TANK, PlayerRole
 
@@ -597,10 +597,61 @@ class DamageWindow:
     damage: int
     covered_by: list[str] = field(default_factory=list)
     late_by: Optional[float] = None
+    #: the configured mechanic that opens this window, when there is one
+    name: str = ""
+    #: True when anchored to a boss cast, False when derived from a damage peak
+    scheduled: bool = False
+
+    @property
+    def label(self) -> str:
+        return self.name or "the damage spike"
 
     @property
     def covered(self) -> bool:
         return bool(self.covered_by)
+
+
+def scheduled_windows(
+    pull: "Pull", boss: Optional[BossConfig]
+) -> list[DamageWindow]:
+    """Windows anchored to the boss cast that opens them.
+
+    A derived window sits wherever the damage landed, so it can say a spike was
+    uncovered but never that a cooldown was LATE -- the peak moves with the
+    thing being measured. Anchoring to the cast fixes the clock.
+    """
+    if boss is None or not boss.damage_windows:
+        return []
+
+    by_trigger: dict[int, ScheduledWindow] = {
+        w.trigger_spell_id: w for w in boss.damage_windows
+    }
+    out: list[DamageWindow] = []
+    for c in pull.casts:
+        if c.started or not c.hostile or c.spell_id not in by_trigger:
+            continue
+        spec = by_trigger[c.spell_id]
+        start = c.t + spec.lead_s
+        # Several adds casting the same thing at once is ONE window, not four.
+        if out and start - out[-1].start < spec.duration_s:
+            continue
+        out.append(
+            DamageWindow(
+                start=start,
+                end=start + spec.duration_s,
+                damage=0,
+                name=spec.name,
+                scheduled=True,
+            )
+        )
+
+    for w in out:
+        w.damage = sum(
+            d.amount + d.absorbed
+            for d in pull.damage_taken
+            if w.start <= d.t <= w.end
+        )
+    return out
 
 
 def damage_windows(pull: "Pull", top_n: int = 4) -> list[DamageWindow]:
@@ -729,3 +780,137 @@ def absorb_usage(
         )
     out.sort(key=lambda a: a.rate_per_min)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Battle resurrections
+# ---------------------------------------------------------------------------
+
+#: A rezzed player who dies again inside this window did not get to contribute.
+REZ_GRACE_S = 30.0
+
+
+@dataclass(slots=True)
+class BattleRez:
+    t: float
+    name: str
+    caster: str
+    spell: str
+    #: seconds the player survived after being brought back, if they died again
+    survived_s: Optional[float] = None
+
+    @property
+    def wasted(self) -> bool:
+        """Spent on somebody who died again before they could contribute."""
+        return self.survived_s is not None and self.survived_s < REZ_GRACE_S
+
+
+def battle_rezzes(pull: "Pull") -> list[BattleRez]:
+    """Combat resurrections used, and whether the charge bought anything.
+
+    Charges are scarce on progression, so the question is not only how many
+    were spent but how many were spent on somebody who died again immediately.
+    """
+    out: list[BattleRez] = []
+    for r in sorted(pull.resurrects, key=lambda x: x.t):
+        after = [d.t for d in pull.deaths if d.guid == r.guid and d.t > r.t]
+        out.append(
+            BattleRez(
+                t=r.t,
+                name=r.name,
+                caster=r.caster,
+                spell=r.spell_name,
+                survived_s=(min(after) - r.t) if after else None,
+            )
+        )
+    return out
+
+
+# ---------------------------------------------------------------------------
+# What kind of check the pull failed
+# ---------------------------------------------------------------------------
+
+#: Deaths this close together are one collapse rather than separate mistakes.
+COLLAPSE_WINDOW_S = 20.0
+
+MODE_DAMAGE = "damage check"
+MODE_HEALING = "healing check"
+MODE_SURVIVAL = "survival"
+MODE_UNKNOWN = "unknown"
+
+
+@dataclass(slots=True)
+class FailureMode:
+    mode: str
+    evidence: list[str] = field(default_factory=list)
+
+
+def failure_mode(
+    pull: "Pull",
+    boss: Optional[BossConfig],
+    blameable_deaths: int,
+    boss_percent: Optional[float],
+) -> FailureMode:
+    """Why the pull ended, at the level of what to do about it.
+
+    The three answers need opposite responses, which is why guessing is
+    dangerous: telling a raid to push harder after a survival failure kills
+    them faster, and telling them to stand better when healing was simply
+    outpaced blames the wrong people.
+    """
+    if not pull.is_wipe:
+        return FailureMode(MODE_UNKNOWN, ["the pull was a kill"])
+
+    deaths = sorted(d.t for d in pull.deaths)
+    if not deaths:
+        return FailureMode(MODE_UNKNOWN, ["no deaths recorded"])
+
+    # A damage check: the raid largely survived and the boss did not die.
+    if boss_percent is not None and boss_percent > 20.0 and blameable_deaths <= 2:
+        return FailureMode(
+            MODE_DAMAGE,
+            [
+                f"boss finished at {boss_percent:.1f}% with only "
+                f"{blameable_deaths} blameable deaths"
+            ],
+        )
+
+    # A healing check: the raid collapsed together, and mostly to damage the
+    # config does not call avoidable -- so it was not a positioning failure.
+    collapse = [t for t in deaths if t >= deaths[-1] - COLLAPSE_WINDOW_S]
+    share_collapsed = len(collapse) / max(1, len(pull.players))
+    unavoidable = 0
+    considered = 0
+    for death in pull.deaths:
+        if death.t < deaths[-1] - COLLAPSE_WINDOW_S:
+            continue
+        window = [
+            d for d in pull.damage_taken
+            if d.dest_guid == death.guid and death.t - 3.0 <= d.t <= death.t + 0.5
+        ]
+        if not window:
+            continue
+        considered += 1
+        killer = window[-1]
+        if boss is None or boss.is_avoidable(killer.spell_id) is None:
+            unavoidable += 1
+
+    if (
+        share_collapsed >= 0.4
+        and considered
+        and unavoidable / considered >= 0.7
+    ):
+        return FailureMode(
+            MODE_HEALING,
+            [
+                f"{len(collapse)} of {len(pull.players)} died within "
+                f"{COLLAPSE_WINDOW_S:.0f}s of each other",
+                f"{unavoidable} of {considered} of those killing blows are not "
+                f"avoidable mechanics, so it was not a positioning failure",
+            ],
+        )
+
+    return FailureMode(
+        MODE_SURVIVAL,
+        [f"{blameable_deaths} deaths carry information and are spread out"],
+    )
