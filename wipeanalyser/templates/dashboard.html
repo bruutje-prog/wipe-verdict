@@ -43,6 +43,13 @@
     color: var(--dim); margin: 0 0 12px; font-weight: 600;
   }
   .pulltitle { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .copybtn {
+    float: right; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  .copybtn:hover { border-color: var(--accent); color: var(--accent); }
+  .copybtn.done { border-color: var(--good); color: var(--good); }
   .pulltitle .kill { color: var(--good); }
   .pulltitle .wipe { color: var(--bad); }
   .headline { font-size: 17px; line-height: 1.45; color: var(--text); }
@@ -158,6 +165,7 @@
         <button id="unpin" type="button">Back to latest</button>
       </div>
       <div id="verdict" style="display:none">
+        <button class="copybtn" id="copy" type="button" title="Copy a short summary for Discord">Copy for Discord</button>
         <div class="pulltitle" id="pull-title"></div>
         <div class="headline" id="headline"></div>
       </div>
@@ -367,6 +375,7 @@ function renderLatest(d) {
   // A different pull means the previous selection is meaningless.
   if (currentPullId !== d.id) selection = null;
   currentPullId = d.id;
+  shareText = d.share_text || "";
 
   const res = d.success
     ? `<span class="kill">KILL</span>`
@@ -457,6 +466,24 @@ function updatePinBar(newerAvailable) {
     ? `Showing an earlier attempt. <span class="newpull">A newer pull has finished.</span>`
     : "Showing an earlier attempt.";
 }
+
+let shareText = "";
+$("copy").addEventListener("click", async () => {
+  if (!shareText) return;
+  const btn = $("copy");
+  try {
+    await navigator.clipboard.writeText(shareText);
+  } catch (e) {
+    // Clipboard needs a secure context; fall back to a selectable textarea.
+    const ta = document.createElement("textarea");
+    ta.value = shareText;
+    document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); ta.remove();
+  }
+  btn.textContent = "Copied";
+  btn.classList.add("done");
+  setTimeout(() => { btn.textContent = "Copy for Discord"; btn.classList.remove("done"); }, 1600);
+});
 
 $("deaths").addEventListener("click", ev => {
   const tr = ev.target.closest("tr[data-death]");

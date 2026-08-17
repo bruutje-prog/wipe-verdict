@@ -20,6 +20,7 @@ from .config import load_config
 from .logparse import parse_line
 from .pulls import PullSegmenter
 from .session import PullReport, Session
+from .share import verdict_text
 from .tail import LogTailer, find_log, read_existing
 
 POLL_SECONDS = 1.0
@@ -104,6 +105,7 @@ def _report_json(report: PullReport, pull_id: int = -1) -> dict:
             if report.delta
             else None
         ),
+        "share_text": verdict_text(report),
         "root_index": _root_index(report),
         "deaths": [
             {

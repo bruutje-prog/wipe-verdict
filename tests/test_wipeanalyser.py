@@ -706,6 +706,38 @@ class TestAmountThreshold(unittest.TestCase):
         self.assertEqual(row.damage, 680_000, "damage must exclude filtered hits")
 
 
+class TestShareText(unittest.TestCase):
+    def _report(self):
+        cfg = load_config()
+        p = _pull()
+        p.players = {"Player-1": "Raider"}
+        p.damage_taken.append(_mechanic(50.0, "Player-1"))
+        p.deaths.append(DeathRecord(t=50.5, guid="Player-1", name="Raider"))
+        return Session(cfg).add(p)
+
+    def test_summary_names_the_boss_and_the_verdict(self):
+        from wipeanalyser.share import verdict_text
+
+        text = verdict_text(self._report())
+        self.assertIn("Kor'kron Dark Shaman", text)
+        self.assertIn("Raider", text)
+
+    def test_summary_fits_in_a_discord_message(self):
+        """A paste that Discord truncates loses the end of the list, which is
+        where the least important items are -- so trim deliberately instead."""
+        from wipeanalyser.share import DISCORD_LIMIT, verdict_text
+
+        text = verdict_text(self._report())
+        self.assertLessEqual(len(text), DISCORD_LIMIT)
+
+    def test_a_tight_limit_keeps_the_headline(self):
+        from wipeanalyser.share import verdict_text
+
+        text = verdict_text(self._report(), limit=120)
+        self.assertLessEqual(len(text), 120)
+        self.assertIn("Kor'kron Dark Shaman", text)
+
+
 class TestConfig(unittest.TestCase):
     def test_both_progression_bosses_are_configured(self):
         cfg = load_config()
