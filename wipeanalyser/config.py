@@ -36,6 +36,11 @@ class Mechanic:
     #: tell them apart. A threshold lets whoever knows the fight separate them
     #: instead of the tool guessing.
     amount_at_least: int = 0
+    #: Collapse hits on the same player within this many seconds into one.
+    #: A storm that ticks every 2 seconds is one mistake held for a while, not
+    #: one mistake per tick -- the same trap as counting a channel's ticks as
+    #: casts. For ticking damage that applies no aura to count by instead.
+    min_gap_s: float = 0.0
 
     @property
     def by_applications(self) -> bool:
@@ -189,6 +194,7 @@ def load_config(config_dir: Optional[Path | str] = None) -> Config:
                     note=row.get("note", ""),
                     exempt_roles=tuple(row.get("exempt_roles") or ()),
                     amount_at_least=_as_int(row.get("amount_at_least"), 0),
+                    min_gap_s=float(row.get("min_gap_s", 0.0)),
                 )
                 if m.count not in (COUNT_HITS, COUNT_APPLICATIONS):
                     raise ValueError(

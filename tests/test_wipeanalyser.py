@@ -415,23 +415,23 @@ class TestAvoidableCounting(unittest.TestCase):
         # A real player GUID: application counting is restricted to players, so
         # a placeholder id would be filtered out along with the boss's adds.
         p.players = {"Player-4454-0001": "A"}
-        # Toxic Mist (144089) is configured count: applications.
+        # Foulness (144066) is configured count: applications.
         for i in range(100):
             p.damage_taken.append(
                 DamageRecord(
                     t=float(i), dest_guid="Player-4454-0001", dest_name="A",
-                    src_guid="Creature-1", src_name="Boss", spell_id=144089,
-                    spell_name="Toxic Mist", amount=1000, absorbed=0,
+                    src_guid="Creature-1", src_name="Boss", spell_id=144066,
+                    spell_name="Foulness", amount=1000, absorbed=0,
                     overkill=-1, periodic=True, hp_after=None,
                 )
             )
         p.auras.append(AuraRecord(
             t=0.0, dest_guid="Player-4454-0001", dest_name="A",
-            src_guid="Creature-1", spell_id=144089, spell_name="Toxic Mist",
+            src_guid="Creature-1", spell_id=144066, spell_name="Foulness",
             aura_type="DEBUFF", applied=True,
         ))
         rows = avoidable_table(p, boss, detect_roles(p))
-        mist = next(r for r in rows if r.spell_id == 144089)
+        mist = next(r for r in rows if r.spell_id == 144066)
         self.assertEqual(mist.count, 1, "ticks must not be counted as hits")
         self.assertEqual(mist.counted_by, "applications")
         self.assertEqual(mist.damage, 100_000, "damage still totals every tick")
@@ -655,7 +655,7 @@ class TestAvoidableTargets(unittest.TestCase):
         for guid in ("Player-1", "Creature-0-4448-1136-7803-71591-000002267A"):
             p.auras.append(AuraRecord(
                 t=10.0, dest_guid=guid, dest_name=guid, src_guid="Creature-9",
-                spell_id=144089, spell_name="Toxic Mist", aura_type="DEBUFF",
+                spell_id=144066, spell_name="Foulness", aura_type="DEBUFF",
                 applied=True,
             ))
         rows = avoidable_table(p, boss, detect_roles(p))

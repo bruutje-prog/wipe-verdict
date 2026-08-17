@@ -149,6 +149,7 @@ def avoidable_table(
 
     hits: dict[tuple[str, int], int] = defaultdict(int)
     damage: dict[tuple[str, int], int] = defaultdict(int)
+    last_hit: dict[tuple[str, int], float] = {}
     for d in pull.damage_taken:
         mech = boss.is_avoidable(d.spell_id)
         if mech is None:
@@ -161,6 +162,14 @@ def avoidable_table(
         key = (d.dest_guid, d.spell_id)
         damage[key] += d.amount + d.absorbed
         if not mech.by_applications:
+            # Damage always totals every tick; the HIT count is what a gap
+            # collapses, so "how much did this cost" stays honest while "how
+            # many mistakes" does not inflate with tick rate.
+            if mech.min_gap_s:
+                prev = last_hit.get(key)
+                if prev is not None and d.t - prev < mech.min_gap_s:
+                    continue
+                last_hit[key] = d.t
             hits[key] += 1
 
     # Ticking mechanics are counted by application. Counting ticks would let one

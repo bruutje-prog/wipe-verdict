@@ -43,9 +43,20 @@ bosses:
       # is holding the boss. With 3 tanks in 24 raiders, ~12% is what an
       # untargeted mechanic looks like. Toxic Storm 18%, Falling Ash 14%,
       # Toxic Tornado 12%, Foul Stream 17% -- all untargeted, no exemption.
-      - {spell_id: 144017, name: "Toxic Storm",   count: hits}
+      # 450k every 2s to anyone within 9 yards, and the storm moves (tooltip).
+      # Ticking, with no aura to count by, so hits inside 3s of each other are
+      # one stay rather than several mistakes: 49 of 111 gaps were under 3s.
+      - {spell_id: 144017, name: "Toxic Storm",   count: hits, min_gap_s: 3}
+      # 450k every 1s within 5 yards, but hits are discrete in practice --
+      # median gap between hits on one player is 27.6s, so no collapsing.
       - {spell_id: 144030, name: "Toxic Tornado", count: hits}
-      - {spell_id: 143987, name: "Falling Ash",   count: hits}
+      # Two components under one id (tooltip): 999,999 within 17 yards, and
+      # 480,000 to ALL players on impact. Only the close hit is a mistake.
+      # Across 160 hits the maximum was 432,000 and the median 347,760 -- all
+      # of it the 480k raid-wide half, so nobody has been inside 17 yards yet.
+      # A mitigated 999,999 cannot land near 600k, so this counts only that.
+      - {spell_id: 143987, name: "Falling Ash",   count: hits,
+         amount_at_least: 600000}
       - {spell_id: 144334, name: "Iron Tomb",     count: hits}
       - {spell_id: 144331, name: "Iron Prison",   count: hits}
       # 54% of its hits land on tanks, four times what an untargeted mechanic
@@ -53,11 +64,15 @@ bosses:
       # dodging it by choice.
       - {spell_id: 143993, name: "Foul Geyser",   count: hits,
          exempt_roles: [tank]}
-      # Ticking pools. 708 ticks across 21 players in one pull -- counted by
-      # application, or this single mechanic outweighs everything else.
-      - {spell_id: 144089, name: "Toxic Mist", count: applications}
+      # Ticking pools. Counted by application, or one mechanic outweighs
+      # everything else in the report.
       - {spell_id: 144066, name: "Foulness",   count: applications}
       - {spell_id: 144090, name: "Foul Stream", count: applications}
+    # OMITTED - Toxic Mist (144089) is NOT avoidable. The tooltip is explicit:
+    # it "injects several players", so it is targeted rather than stood in, and
+    # it "pierces all immunities". It was flagged on 21 of 24 raiders every
+    # pull for something none of them could do anything about. The growing
+    # Toxicity stack it applies is a healing problem, not a positioning one.
 
     tank_busters:
       - {spell_id: 144215, name: "Froststorm Strike", expect_cooldown: true}
@@ -355,13 +370,19 @@ bosses:
       # Fire left on the ground by the laser. Counted by application, because
       # standing in it once is one mistake however long the tick list is.
       - {spell_id: 143856, name: "Superheated",     count: applications}
-      # A crawler mine reaching its target.
-      - {spell_id: 143002, name: "Detonate!",       count: hits}
-      # Blackfuse's sawblade. Established from tonight's log: 100% of the 96
-      # player hits landed within 25s of a Launch Sawblade cast, median lag
-      # 0.7s, and the bleed left on the Automated Shredder (143328) follows the
-      # same casts at median 7.2s as the blade travels on. Not proximity to the
-      # Shredder -- victims were a median 20m away from it. Dodge the blade.
+      # Detonate! (143002) OMITTED - not avoidable. The tooltip gives its
+      # radius as 300 YARDS, which is the whole room, so there is nowhere to
+      # stand. It was flagged on 25 of 25 raiders every pull. What is
+      # actionable is stopping the mine before it reaches its target, and that
+      # is not something this table can measure.
+      # Blackfuse's sawblade. Confirmed by tooltip: a launched sawblade hovers
+      # in place until an Activated Electromagnet removes it, and deals 650,000
+      # to "any players or Automated Shredders with which they come into
+      # contact". So it is contact damage from a stationary hazard -- genuinely
+      # avoidable, and the raid can be told to stop walking into it.
+      # The log agrees: 100% of the 96 player hits landed within 25s of a
+      # Launch Sawblade cast, median lag 0.7s, and the bleed left on the
+      # Automated Shredder (143328) is the same blade touching the add.
       - {spell_id: 143327, name: "Serrated Slash",  count: hits}
       - {spell_id: 144210, name: "Death From Above", count: hits}
     # OMITTED - Overload (145444) is NOT avoidable. It is scheduled raid damage
