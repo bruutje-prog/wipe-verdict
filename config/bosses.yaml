@@ -103,8 +103,12 @@ bosses:
     damage_windows:
       - {name: "Falling Ash", trigger_spell_id: 143973, lead_s: 13, duration_s: 8}
 
-    interruptible:
-      - {spell_id: 144214, name: "Froststorm Bolt", verified: false}
+    # Froststorm Bolt (144214) was seeded here as an unverified candidate on
+    # the strength of having a cast bar. Confirmed NOT interruptible by the
+    # raid leader on 17/08 -- the tooltip carries no interrupt marker and 25
+    # casts completed untouched in a single pull. Removed; do not re-add from
+    # cast-bar evidence alone.
+    interruptible: []
 
   thok_the_bloodthirsty:
     encounter_id: 1599
